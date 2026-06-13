@@ -3,8 +3,12 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { CollectorModule } from './collector/collector.module';
+import { EloModule } from './elo/elo.module';
 import { Match } from './match/match.entity';
 import { Odds } from './odds/odds.entity';
+import { EloRating } from './elo/elo-rating.entity';
+import { EloHistory } from './elo/elo-history.entity';
+import { WcPrediction } from './elo/wc-prediction.entity';
 
 /**
  * 根模块 - NestJS 应用的入口模块
@@ -26,7 +30,7 @@ import { Odds } from './odds/odds.entity';
       database: 'data/football.db',
 
       // 自动加载实体类，TypeORM 会根据实体定义自动创建/更新表结构
-      entities: [Match, Odds],
+      entities: [Match, Odds, EloRating, EloHistory, WcPrediction],
 
       // synchronize: true 会自动同步实体定义到数据库表结构
       // ⚠️ 生产环境应设为 false，使用 migration 管理数据库变更
@@ -38,6 +42,9 @@ import { Odds } from './odds/odds.entity';
 
     // 导入数据采集模块
     CollectorModule,
+
+    // 导入 ELO 评分模块
+    EloModule,
   ],
   controllers: [AppController],
   providers: [AppService],
