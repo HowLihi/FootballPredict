@@ -63,6 +63,13 @@
   background: rgba(167, 139, 250, 0.1);
 }
 
+.nav-links a.nav-disabled {
+  color: #4b5563;
+  cursor: not-allowed;
+  pointer-events: none;
+  opacity: 0.5;
+}
+
 .app-main {
   flex: 1;
   max-width: 1200px;

@@ -1,4 +1,12 @@
-import { Controller, Get, Post, Query, Logger, Body } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Query,
+  Logger,
+  Body,
+  Param,
+} from '@nestjs/common';
 import { WcPredictionService } from './wc-prediction.service';
 import { WcPrediction } from './wc-prediction.entity';
 
@@ -27,6 +35,16 @@ export class WcPredictionController {
       group,
       round ? parseInt(round) : undefined,
     );
+  }
+
+  @Get('recent')
+  async getRecentMatches(): Promise<WcPrediction[]> {
+    return this.wcPredictionService.getRecentMatches();
+  }
+
+  @Get('weather/:id')
+  async getMatchWeather(@Param('id') id: string) {
+    return this.wcPredictionService.getMatchWeather(parseInt(id));
   }
 
   @Get('groups')

@@ -12,11 +12,13 @@ export default function Layout() {
           </NavLink>
           <nav className="nav-links">
             <NavLink to="/" end>
-              仪表盘
+              近期比赛
             </NavLink>
-            <NavLink to="/rankings">排名</NavLink>
-            <NavLink to="/predict">比赛预测</NavLink>
-            <NavLink to="/worldcup">世界杯</NavLink>
+            <NavLink to="/predict">调参预测</NavLink>
+            <NavLink to="/rankings">历史数据</NavLink>
+            <NavLink to="/players" className="nav-disabled">
+              球员信息
+            </NavLink>
           </nav>
         </div>
       </header>

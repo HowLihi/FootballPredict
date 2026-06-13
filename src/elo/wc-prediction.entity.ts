@@ -12,7 +12,7 @@ export class WcPrediction {
   id: number;
 
   @Index()
-  @Column({ name: 'match_date', type: 'date' })
+  @Column({ name: 'match_date', type: 'text' })
   matchDate: string;
 
   @Column({ name: 'group_name', length: 2 })

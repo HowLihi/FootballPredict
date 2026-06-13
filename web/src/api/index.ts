@@ -51,6 +51,13 @@ export interface MatchPrediction {
   homeAdvantage: number;
 }
 
+export interface AdvancedPrediction extends MatchPrediction {
+  predictedHomeScore: number;
+  predictedAwayScore: number;
+  weatherEffect: number;
+  refereeEffect: number;
+}
+
 export interface WcPrediction {
   id: number;
   matchDate: string;
@@ -90,17 +97,6 @@ export interface GroupTeamPrediction {
   predictedGoalsAgainst: number;
 }
 
-export interface KnockoutPrediction {
-  round: string;
-  match: string;
-  homeTeam: string;
-  awayTeam: string;
-  homeWinProb: number;
-  drawProb: number;
-  awayWinProb: number;
-  predictedWinner: string;
-}
-
 export interface PredictionAccuracy {
   total: number;
   correct: number;
@@ -110,29 +106,19 @@ export interface PredictionAccuracy {
   awayWins: number;
 }
 
-export interface CollectorStatus {
-  status: string;
-  currentSeason: string;
-  supportedLeagues: string[];
-  availableSources: string[];
+export interface WcWeather {
+  condition: string;
+  label: string;
+  temperature: number | null;
+  precipitation: number | null;
+  windSpeed: number | null;
+  humidity: number | null;
+  venue: string;
+  matchDate: string;
 }
 
 export const api = {
   elo: {
-    calculate: (
-      startDate?: string,
-      endDate?: string,
-      kFactor?: string,
-      homeAdvantage?: string,
-    ) =>
-      request<{
-        totalMatches: number;
-        totalTeams: number;
-        topTeams: EloRating[];
-      }>(
-        `/elo/calculate${buildQuery({ startDate, endDate, kFactor, homeAdvantage })}`,
-        { method: 'POST' },
-      ),
     getRankings: (page = 1, limit = 50) =>
       request<{ data: EloRating[]; total: number }>(
         `/elo/rankings?page=${page}&limit=${limit}`,
@@ -149,46 +135,40 @@ export const api = {
       request<MatchPrediction | { error: string } | null>(
         `/elo/predict?home=${encodeURIComponent(home)}&away=${encodeURIComponent(away)}&neutral=${neutral}`,
       ),
-    recalculate: () =>
-      request<{
-        totalMatches: number;
-        totalTeams: number;
-        topTeams: EloRating[];
-      }>('/elo/recalculate', { method: 'POST' }),
+    predictAdvanced: (params: {
+      homeTeam: string;
+      awayTeam: string;
+      neutral: boolean;
+      kFactor: number;
+      homeAdvantage: number;
+      weatherWeight: number;
+      refereeWeight: number;
+      weatherCondition: string;
+      refereeStrictness: string;
+    }) =>
+      request<AdvancedPrediction | { error: string } | null>(
+        '/elo/predict-advanced',
+        {
+          method: 'POST',
+          body: JSON.stringify(params),
+        },
+      ),
   },
   wc: {
+    getRecentMatches: () => request<WcPrediction[]>('/wc/recent'),
+    getWeather: (id: number) => request<WcWeather | null>(`/wc/weather/${id}`),
+    getPredictions: (group?: string, round?: number) =>
+      request<WcPrediction[]>(
+        `/wc/predictions${buildQuery({ group, round: round?.toString() })}`,
+      ),
+    getGroupPredictions: () => request<GroupPrediction[]>('/wc/groups'),
+    getAccuracy: () => request<PredictionAccuracy>('/wc/accuracy'),
     generatePredictions: () =>
       request<{
         totalMatches: number;
         predictions: WcPrediction[];
         groupPredictions: GroupPrediction[];
       }>('/wc/predict', { method: 'POST' }),
-    getPredictions: (group?: string, round?: number) =>
-      request<WcPrediction[]>(
-        `/wc/predictions${buildQuery({ group, round: round?.toString() })}`,
-      ),
-    getGroupPredictions: () => request<GroupPrediction[]>('/wc/groups'),
-    getKnockoutPredictions: () => request<KnockoutPrediction[]>('/wc/knockout'),
-    getAccuracy: () => request<PredictionAccuracy>('/wc/accuracy'),
-    updateResult: (
-      homeTeam: string,
-      awayTeam: string,
-      homeScore: number,
-      awayScore: number,
-    ) =>
-      request<any>('/wc/result', {
-        method: 'POST',
-        body: JSON.stringify({ homeTeam, awayTeam, homeScore, awayScore }),
-      }),
-  },
-  collector: {
-    getStatus: () => request<CollectorStatus>('/collector/status'),
-    collectAll: (season?: string, source = 'csv') =>
-      request<{
-        season: string;
-        source: string;
-        results: Record<string, number>;
-      }>(`/collector/all${buildQuery({ season, source })}`),
   },
 };
 

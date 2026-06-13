@@ -1,10 +1,10 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
-import Dashboard from './pages/Dashboard';
+import RecentMatches from './pages/RecentMatches';
+import PredictAdvanced from './pages/PredictAdvanced';
 import Rankings from './pages/Rankings';
 import TeamDetail from './pages/TeamDetail';
-import Predict from './pages/Predict';
-import WorldCup from './pages/WorldCup';
+import Players from './pages/Players';
 import './App.css';
 
 function App() {
@@ -12,11 +12,11 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route element={<Layout />}>
-          <Route path="/" element={<Dashboard />} />
+          <Route path="/" element={<RecentMatches />} />
+          <Route path="/predict" element={<PredictAdvanced />} />
           <Route path="/rankings" element={<Rankings />} />
+          <Route path="/players" element={<Players />} />
           <Route path="/team/:name" element={<TeamDetail />} />
-          <Route path="/predict" element={<Predict />} />
-          <Route path="/worldcup" element={<WorldCup />} />
         </Route>
       </Routes>
     </BrowserRouter>

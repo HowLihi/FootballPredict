@@ -474,6 +474,192 @@ export class EloService {
     return drawProb;
   }
 
+  async predictAdvanced(body: {
+    homeTeam: string;
+    awayTeam: string;
+    neutral: boolean;
+    kFactor: number;
+    homeAdvantage: number;
+    weatherWeight: number;
+    refereeWeight: number;
+    weatherCondition: string;
+    refereeStrictness: string;
+  }): Promise<{
+    homeTeam: string;
+    awayTeam: string;
+    homeRating: number;
+    awayRating: number;
+    homeWinProbability: number;
+    drawProbability: number;
+    awayWinProbability: number;
+    homeAdvantage: number;
+    predictedHomeScore: number;
+    predictedAwayScore: number;
+    weatherEffect: number;
+    refereeEffect: number;
+  } | null> {
+    const homeRatingEntity = await this.eloRatingRepository.findOne({
+      where: { teamName: body.homeTeam },
+    });
+    const awayRatingEntity = await this.eloRatingRepository.findOne({
+      where: { teamName: body.awayTeam },
+    });
+
+    if (!homeRatingEntity || !awayRatingEntity) {
+      return null;
+    }
+
+    const homeRating = homeRatingEntity.rating;
+    const awayRating = awayRatingEntity.rating;
+
+    const homeAdv = body.neutral ? 0 : body.homeAdvantage;
+    const effectiveHomeRating = homeRating + homeAdv;
+
+    const homeWinProb = this.expectedScore(effectiveHomeRating, awayRating);
+    const awayWinProb = this.expectedScore(awayRating, effectiveHomeRating);
+
+    let drawProb = this.estimateDrawProbability(
+      homeWinProb,
+      awayWinProb,
+      homeRating,
+      awayRating,
+    );
+
+    const weatherEffect = this.calculateWeatherEffect(
+      body.weatherCondition,
+      body.weatherWeight,
+      homeRating,
+      awayRating,
+    );
+
+    const refereeEffect = this.calculateRefereeEffect(
+      body.refereeStrictness,
+      body.refereeWeight,
+    );
+
+    let adjustedHomeWin = homeWinProb * (1 - drawProb);
+    let adjustedAwayWin = awayWinProb * (1 - drawProb);
+
+    adjustedHomeWin += weatherEffect;
+    adjustedAwayWin -= weatherEffect;
+    drawProb += refereeEffect;
+
+    adjustedHomeWin = Math.max(0.01, adjustedHomeWin);
+    adjustedAwayWin = Math.max(0.01, adjustedAwayWin);
+    drawProb = Math.max(0.05, Math.min(0.4, drawProb));
+
+    const total = adjustedHomeWin + adjustedAwayWin + drawProb;
+    adjustedHomeWin /= total;
+    adjustedAwayWin /= total;
+    drawProb /= total;
+
+    const { homeGoals, awayGoals } = this.predictScoreAdvanced(
+      adjustedHomeWin,
+      drawProb,
+      adjustedAwayWin,
+      homeRating,
+      awayRating,
+      weatherEffect,
+      refereeEffect,
+    );
+
+    return {
+      homeTeam: body.homeTeam,
+      awayTeam: body.awayTeam,
+      homeRating,
+      awayRating,
+      homeWinProbability: Math.round(adjustedHomeWin * 1000) / 1000,
+      drawProbability: Math.round(drawProb * 1000) / 1000,
+      awayWinProbability: Math.round(adjustedAwayWin * 1000) / 1000,
+      homeAdvantage: homeAdv,
+      predictedHomeScore: homeGoals,
+      predictedAwayScore: awayGoals,
+      weatherEffect: Math.round(weatherEffect * 1000) / 1000,
+      refereeEffect: Math.round(refereeEffect * 1000) / 1000,
+    };
+  }
+
+  private calculateWeatherEffect(
+    condition: string,
+    weight: number,
+    homeRating: number,
+    awayRating: number,
+  ): number {
+    const weatherImpact: Record<string, number> = {
+      sunny: 0,
+      cloudy: 0,
+      rainy: -0.03,
+      heavy_rain: -0.06,
+      snowy: -0.05,
+      windy: -0.04,
+      hot: -0.02,
+      cold: -0.03,
+      humid: -0.02,
+    };
+
+    const baseEffect = weatherImpact[condition] || 0;
+
+    const ratingDiff = homeRating - awayRating;
+    const direction = ratingDiff > 0 ? -1 : 1;
+
+    return baseEffect * weight * direction;
+  }
+
+  private calculateRefereeEffect(strictness: string, weight: number): number {
+    const strictnessImpact: Record<string, number> = {
+      lenient: 0.03,
+      average: 0,
+      strict: -0.03,
+      very_strict: -0.05,
+    };
+
+    return (strictnessImpact[strictness] || 0) * weight;
+  }
+
+  private predictScoreAdvanced(
+    homeWinProb: number,
+    drawProb: number,
+    awayWinProb: number,
+    homeRating: number,
+    awayRating: number,
+    weatherEffect: number,
+    refereeEffect: number,
+  ): { homeGoals: number; awayGoals: number } {
+    const ratingDiff = homeRating - awayRating;
+    const baseGoals = 1.3;
+
+    let homeExpected = baseGoals + ratingDiff / 800;
+    let awayExpected = baseGoals - ratingDiff / 800;
+
+    homeExpected = Math.max(0.3, homeExpected);
+    awayExpected = Math.max(0.3, awayExpected);
+
+    if (homeWinProb > awayWinProb + 0.15) {
+      homeExpected += 0.4;
+    } else if (awayWinProb > homeWinProb + 0.15) {
+      awayExpected += 0.4;
+    }
+
+    if (drawProb > 0.28) {
+      const avg = (homeExpected + awayExpected) / 2;
+      homeExpected = homeExpected * 0.6 + avg * 0.4;
+      awayExpected = awayExpected * 0.6 + avg * 0.4;
+    }
+
+    homeExpected += weatherEffect * 2;
+    awayExpected -= weatherEffect * 2;
+
+    if (refereeEffect < 0) {
+      homeExpected -= 0.1;
+      awayExpected -= 0.1;
+    }
+
+    return {
+      homeGoals: Math.max(0, Math.round(homeExpected * 10) / 10),
+      awayGoals: Math.max(0, Math.round(awayExpected * 10) / 10),
+    };
+  }
+
   async recalculateFromDbMatches(): Promise<{
     totalMatches: number;
     totalTeams: number;

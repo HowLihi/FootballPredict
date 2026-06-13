@@ -1,0 +1,54 @@
+.players-page {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 24px 20px;
+}
+
+.players-page h1 {
+  font-size: 24px;
+  margin: 0 0 4px;
+}
+
+.coming-soon {
+  margin-top: 40px;
+  text-align: center;
+  background: #1a1d2e;
+  border-radius: 12px;
+  padding: 48px 24px;
+  border: 1px dashed #2a2d3e;
+}
+
+.cs-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.coming-soon h2 {
+  margin: 0 0 12px;
+  color: #9ca3af;
+  font-size: 20px;
+}
+
+.coming-soon p {
+  color: #6b7280;
+  font-size: 14px;
+  margin: 0 0 16px;
+}
+
+.coming-soon ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: inline-block;
+  text-align: left;
+}
+
+.coming-soon li {
+  color: #9ca3af;
+  font-size: 14px;
+  padding: 4px 0;
+}
+
+.coming-soon li::before {
+  content: '📋 ';
+}

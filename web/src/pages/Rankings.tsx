@@ -33,7 +33,7 @@ export default function Rankings() {
   return (
     <div className="rankings-page">
       <div className="page-header">
-        <h1>📊 ELO 排名</h1>
+        <h1>📊 历史数据 — 国家队 ELO 排名</h1>
         <div className="search-box">
           <input
             type="text"
@@ -41,6 +41,25 @@ export default function Rankings() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
+        </div>
+      </div>
+
+      <div className="rankings-summary">
+        <div className="summary-item">
+          <span className="si-value">{total}</span>
+          <span className="si-label">球队总数</span>
+        </div>
+        <div className="summary-item">
+          <span className="si-value">
+            {teams.length > 0 ? Math.round(teams[0].rating) : '-'}
+          </span>
+          <span className="si-label">最高 ELO</span>
+        </div>
+        <div className="summary-item">
+          <span className="si-value">
+            {teams.length > 0 ? teams[0].teamName : '-'}
+          </span>
+          <span className="si-label">排名第一</span>
         </div>
       </div>
 

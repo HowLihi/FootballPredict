@@ -4,11 +4,14 @@ import { Repository } from 'typeorm';
 import * as fs from 'fs';
 import * as path from 'path';
 import { parse } from 'csv-parse';
+import axios from 'axios';
+import * as https from 'https';
 import { EloService, MatchPrediction } from './elo.service';
 import { WcPrediction } from './wc-prediction.entity';
 
 export interface WcFixture {
   date: string;
+  time: string;
   group: string;
   homeTeam: string;
   awayTeam: string;
@@ -114,7 +117,7 @@ export class WcPredictionService {
     const { homeGoals, awayGoals } = this.predictScore(prediction);
 
     const entity = new WcPrediction();
-    entity.matchDate = fixture.date;
+    entity.matchDate = `${fixture.date} ${fixture.time}`;
     entity.groupName = fixture.group;
     entity.homeTeam = fixture.homeTeam;
     entity.awayTeam = fixture.awayTeam;
@@ -287,6 +290,7 @@ export class WcPredictionService {
         .on('data', (record: Record<string, string>) => {
           fixtures.push({
             date: record['date'],
+            time: record['match_time'] || '15:00:00',
             group: record['group'],
             homeTeam: record['home_team']?.trim() || '',
             awayTeam: record['away_team']?.trim() || '',
@@ -298,6 +302,24 @@ export class WcPredictionService {
         .on('end', () => resolve(fixtures))
         .on('error', (error: Error) => reject(error));
     });
+  }
+
+  async getRecentMatches(): Promise<WcPrediction[]> {
+    const today = new Date().toISOString().split('T')[0];
+    const weekLater = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split('T')[0];
+    const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split('T')[0];
+
+    return this.wcPredictionRepository
+      .createQueryBuilder('p')
+      .where('p.matchDate >= :threeDaysAgo', { threeDaysAgo })
+      .andWhere('p.matchDate <= :weekLater', { weekLater })
+      .orderBy('p.matchDate', 'ASC')
+      .addOrderBy('p.id', 'ASC')
+      .getMany();
   }
 
   async getPredictions(
@@ -456,5 +478,204 @@ export class WcPredictionService {
     matches.push({ label: 'R32-16', home: g('G', 2), away: g('H', 2) });
 
     return matches;
+  }
+
+  async getMatchWeather(matchId: number): Promise<{
+    condition: string;
+    label: string;
+    temperature: number | null;
+    precipitation: number | null;
+    windSpeed: number | null;
+    humidity: number | null;
+    venue: string;
+    matchDate: string;
+  } | null> {
+    const match = await this.wcPredictionRepository.findOne({
+      where: { id: matchId },
+    });
+
+    if (!match || !match.venue) {
+      return null;
+    }
+
+    const coords = this.getVenueCoordinates(match.venue);
+    if (!coords) {
+      return null;
+    }
+
+    const weather = await this.fetchWeatherFromOpenMeteo(
+      coords.lat,
+      coords.lon,
+      match.matchDate,
+    );
+
+    return {
+      ...weather,
+      venue: match.venue,
+      matchDate: match.matchDate,
+    };
+  }
+
+  private getVenueCoordinates(
+    venue: string,
+  ): { lat: number; lon: number } | null {
+    const VENUE_COORDS: Record<string, { lat: number; lon: number }> = {
+      'AT&T Stadium': { lat: 32.7473, lon: -97.0945 },
+      'AT&T Stadium (Arlington, TX)': { lat: 32.7473, lon: -97.0945 },
+      'Mercedes-Benz Stadium': { lat: 33.7555, lon: -84.401 },
+      'Mercedes-Benz Stadium (Atlanta, GA)': { lat: 33.7555, lon: -84.401 },
+      'Gillette Stadium': { lat: 42.0909, lon: -71.2643 },
+      'Gillette Stadium (Foxborough, MA)': { lat: 42.0909, lon: -71.2643 },
+      'NRG Stadium': { lat: 29.6847, lon: -95.4108 },
+      'NRG Stadium (Houston, TX)': { lat: 29.6847, lon: -95.4108 },
+      'Arrowhead Stadium': { lat: 39.0489, lon: -94.4839 },
+      'Arrowhead Stadium (Kansas City, MO)': { lat: 39.0489, lon: -94.4839 },
+      'SoFi Stadium': { lat: 33.9535, lon: -118.339 },
+      'SoFi Stadium (Inglewood, CA)': { lat: 33.9535, lon: -118.339 },
+      'Hard Rock Stadium': { lat: 25.958, lon: -80.2389 },
+      'Hard Rock Stadium (Miami Gardens, FL)': { lat: 25.958, lon: -80.2389 },
+      'MetLife Stadium': { lat: 40.8135, lon: -74.0745 },
+      'MetLife Stadium (East Rutherford, NJ)': { lat: 40.8135, lon: -74.0745 },
+      'Lincoln Financial Field': { lat: 39.9008, lon: -75.1675 },
+      'Lincoln Financial Field (Philadelphia, PA)': {
+        lat: 39.9008,
+        lon: -75.1675,
+      },
+      "Levi's Stadium": { lat: 37.4034, lon: -121.9695 },
+      "Levi's Stadium (Santa Clara, CA)": { lat: 37.4034, lon: -121.9695 },
+      'Lumen Field': { lat: 47.5952, lon: -122.3316 },
+      'Lumen Field (Seattle, WA)': { lat: 47.5952, lon: -122.3316 },
+      'Estadio Azteca': { lat: 19.303, lon: -99.1505 },
+      'Estadio Azteca (Mexico City)': { lat: 19.303, lon: -99.1505 },
+      'Estadio BBVA': { lat: 25.6692, lon: -100.2442 },
+      'Estadio BBVA (Monterrey)': { lat: 25.6692, lon: -100.2442 },
+      'Estadio Akron': { lat: 20.6817, lon: -103.4628 },
+      'Estadio Akron (Guadalajara)': { lat: 20.6817, lon: -103.4628 },
+      'BMO Field': { lat: 43.6329, lon: -79.4186 },
+      'BMO Field (Toronto)': { lat: 43.6329, lon: -79.4186 },
+      'BC Place': { lat: 49.2767, lon: -123.112 },
+      'BC Place (Vancouver)': { lat: 49.2767, lon: -123.112 },
+      'State Farm Stadium': { lat: 33.5275, lon: -112.2626 },
+      'State Farm Stadium (Glendale, AZ)': { lat: 33.5275, lon: -112.2626 },
+    };
+
+    for (const [key, coords] of Object.entries(VENUE_COORDS)) {
+      if (venue.includes(key) || key.includes(venue)) {
+        return coords;
+      }
+    }
+    return null;
+  }
+
+  private async fetchWeatherFromOpenMeteo(
+    lat: number,
+    lon: number,
+    date: string,
+  ): Promise<{
+    condition: string;
+    label: string;
+    temperature: number | null;
+    precipitation: number | null;
+    windSpeed: number | null;
+    humidity: number | null;
+  }> {
+    try {
+      const url = 'https://api.open-meteo.com/v1/forecast';
+      const params = {
+        latitude: lat,
+        longitude: lon,
+        hourly:
+          'weather_code,temperature_2m,precipitation_probability,wind_speed_10m,relative_humidity_2m',
+        start_date: date,
+        end_date: date,
+        timezone: 'auto',
+      };
+
+      const res = await axios.get(url, {
+        params,
+        timeout: 30000,
+        httpsAgent: new https.Agent({ family: 4 }),
+      });
+      const data = res.data;
+
+      if (!data.hourly || data.hourly.time.length === 0) {
+        return this.getDefaultWeather();
+      }
+
+      const matchHour = 15;
+      const timeIndex = data.hourly.time.findIndex((t: string) =>
+        t.includes(`T${String(matchHour).padStart(2, '0')}:00`),
+      );
+
+      const idx =
+        timeIndex >= 0 ? timeIndex : Math.floor(data.hourly.time.length / 2);
+
+      const weatherCode = data.hourly.weather_code?.[idx] ?? 0;
+      const temp = data.hourly.temperature_2m?.[idx] ?? null;
+      const precip = data.hourly.precipitation_probability?.[idx] ?? null;
+      const wind = data.hourly.wind_speed_10m?.[idx] ?? null;
+      const humidity = data.hourly.relative_humidity_2m?.[idx] ?? null;
+
+      const { condition, label } = this.mapWeatherCode(weatherCode, temp);
+
+      return {
+        condition,
+        label,
+        temperature: temp,
+        precipitation: precip,
+        windSpeed: wind,
+        humidity,
+      };
+    } catch (err: any) {
+      this.logger.warn(`获取天气数据失败: ${err.message}`);
+      return this.getDefaultWeather();
+    }
+  }
+
+  private mapWeatherCode(
+    code: number,
+    temp: number | null,
+  ): { condition: string; label: string } {
+    if (temp !== null && temp > 35)
+      return { condition: 'hot', label: '🌡️ 高温' };
+    if (temp !== null && temp < 0)
+      return { condition: 'cold', label: '🧊 严寒' };
+
+    if (code === 0) return { condition: 'sunny', label: '☀️ 晴天' };
+    if (code >= 1 && code <= 3)
+      return { condition: 'cloudy', label: '☁️ 多云' };
+    if (code >= 45 && code <= 48)
+      return { condition: 'cloudy', label: '☁️ 多云' };
+    if (code >= 51 && code <= 55)
+      return { condition: 'rainy', label: '🌧️ 小雨' };
+    if (code >= 61 && code <= 65)
+      return { condition: 'rainy', label: '🌧️ 小雨' };
+    if (code >= 71 && code <= 77)
+      return { condition: 'snowy', label: '❄️ 下雪' };
+    if (code >= 80 && code <= 82)
+      return { condition: 'heavy_rain', label: '⛈️ 大雨' };
+    if (code >= 85 && code <= 86)
+      return { condition: 'snowy', label: '❄️ 下雪' };
+    if (code >= 95) return { condition: 'heavy_rain', label: '⛈️ 雷暴' };
+
+    return { condition: 'cloudy', label: '☁️ 多云' };
+  }
+
+  private getDefaultWeather(): {
+    condition: string;
+    label: string;
+    temperature: null;
+    precipitation: null;
+    windSpeed: null;
+    humidity: null;
+  } {
+    return {
+      condition: 'sunny',
+      label: '☀️ 晴天',
+      temperature: null,
+      precipitation: null,
+      windSpeed: null,
+      humidity: null,
+    };
   }
 }

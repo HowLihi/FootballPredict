@@ -53,6 +53,6 @@ import { Odds } from '../odds/odds.entity';
     CsvDataSource,
   ],
   // 对外暴露的服务，其他模块可以注入使用
-  exports: [CollectorService],
+  exports: [CollectorService, FootballDataApiDataSource],
 })
 export class CollectorModule {}

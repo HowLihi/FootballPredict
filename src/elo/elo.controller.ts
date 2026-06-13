@@ -1,4 +1,4 @@
-import { Controller, Get, Query, Logger, Post } from '@nestjs/common';
+import { Controller, Get, Query, Logger, Post, Body } from '@nestjs/common';
 import {
   EloService,
   EloCalculationConfig,
@@ -77,6 +77,35 @@ export class EloController {
       return { error: '请提供主队(home)和客队(away)参数' };
     }
     return this.eloService.predictMatch(home, away, neutral === 'true');
+  }
+
+  @Post('predict-advanced')
+  async predictAdvanced(
+    @Body() body: {
+      homeTeam: string;
+      awayTeam: string;
+      neutral: boolean;
+      kFactor: number;
+      homeAdvantage: number;
+      weatherWeight: number;
+      refereeWeight: number;
+      weatherCondition: string;
+      refereeStrictness: string;
+    },
+  ): Promise<
+    | (MatchPrediction & {
+        predictedHomeScore: number;
+        predictedAwayScore: number;
+        weatherEffect: number;
+        refereeEffect: number;
+      })
+    | { error: string }
+    | null
+  > {
+    if (!body.homeTeam || !body.awayTeam) {
+      return { error: '请提供主队和客队名称' };
+    }
+    return this.eloService.predictAdvanced(body);
   }
 
   @Post('recalculate')
