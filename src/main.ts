@@ -27,6 +27,8 @@ async function bootstrap() {
   );
 
   // 监听端口，默认 3000，可通过环境变量 PORT 自定义
+  app.enableCors();
+
   const port = process.env.PORT ?? 3000;
   await app.listen(port);
 

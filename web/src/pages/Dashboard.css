@@ -1,0 +1,225 @@
+.dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.hero-section {
+  text-align: center;
+  padding: 48px 24px;
+  background: linear-gradient(135deg, #1a1c2e 0%, #252840 100%);
+  border-radius: 16px;
+  border: 1px solid #2a2d3a;
+}
+
+.hero-section h1 {
+  font-size: 36px;
+  color: #fff;
+  margin: 0 0 12px;
+}
+
+.hero-section p {
+  color: #9ca3af;
+  font-size: 16px;
+  margin: 0 0 28px;
+}
+
+.hero-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 24px;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.2s;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-primary {
+  background: #7c3aed;
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background: #6d28d9;
+  transform: translateY(-1px);
+}
+
+.btn-secondary {
+  background: #1e2030;
+  color: #a78bfa;
+  border: 1px solid #7c3aed;
+}
+
+.btn-secondary:hover {
+  background: #252840;
+  transform: translateY(-1px);
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.stat-card {
+  background: #161822;
+  border: 1px solid #2a2d3a;
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.stat-icon {
+  font-size: 32px;
+}
+
+.stat-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.stat-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.stat-label {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.section-header h2 {
+  font-size: 20px;
+  color: #fff;
+  margin: 0;
+}
+
+.view-all {
+  color: #a78bfa;
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.view-all:hover {
+  text-decoration: underline;
+}
+
+.teams-table-wrapper {
+  overflow-x: auto;
+}
+
+.teams-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.teams-table th {
+  text-align: left;
+  padding: 12px 16px;
+  color: #6b7280;
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid #2a2d3a;
+}
+
+.teams-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid #1e2030;
+}
+
+.teams-table tr:hover {
+  background: #1a1c2e;
+}
+
+.rank {
+  font-weight: 700;
+  width: 40px;
+}
+
+.rank-1 {
+  color: #fbbf24;
+}
+.rank-2 {
+  color: #9ca3af;
+}
+.rank-3 {
+  color: #cd7f32;
+}
+
+.team-name a {
+  color: #a78bfa;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.team-name a:hover {
+  text-decoration: underline;
+}
+
+.rating {
+  font-weight: 700;
+  color: #fff;
+}
+
+.win {
+  color: #34d399;
+}
+.draw {
+  color: #fbbf24;
+}
+.loss {
+  color: #f87171;
+}
+
+.loading {
+  text-align: center;
+  padding: 40px;
+  color: #6b7280;
+}
+
+.error {
+  text-align: center;
+  padding: 40px;
+  color: #f87171;
+}
+
+@media (max-width: 768px) {
+  .hero-section {
+    padding: 32px 16px;
+  }
+
+  .hero-section h1 {
+    font-size: 24px;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-actions {
+    flex-direction: column;
+    align-items: center;
+  }
+}
