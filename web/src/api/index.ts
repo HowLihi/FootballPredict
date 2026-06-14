@@ -132,6 +132,30 @@ export interface WcReferee {
   assigned: boolean;
 }
 
+export interface GameTheoryComparison {
+  ourPrediction: {
+    homeScore: number;
+    awayScore: number;
+    homeWinProb: number;
+    drawProb: number;
+    awayWinProb: number;
+  };
+  platforms: Array<{
+    name: string;
+    homeScore: number;
+    awayScore: number;
+    homeWinProb: number;
+    drawProb: number;
+    awayWinProb: number;
+    verdict: string;
+  }>;
+  analysis: {
+    fairness: string;
+    fifaRevenue: string;
+    bookmakerProfit: string;
+  };
+}
+
 export const api = {
   elo: {
     getRankings: (page = 1, limit = 50) =>
@@ -174,6 +198,8 @@ export const api = {
     getWeather: (id: number) => request<WcWeather | null>(`/wc/weather/${id}`),
     getReferee: (id: number) => request<WcReferee | null>(`/wc/referee/${id}`),
     getAllReferees: () => request<WcReferee[]>('/wc/referees'),
+    getComparison: (id: number) =>
+      request<GameTheoryComparison | null>(`/wc/compare/${id}`),
     getPredictions: (group?: string, round?: number) =>
       request<WcPrediction[]>(
         `/wc/predictions${buildQuery({ group, round: round?.toString() })}`,

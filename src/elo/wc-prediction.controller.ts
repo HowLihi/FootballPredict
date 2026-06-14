@@ -57,6 +57,11 @@ export class WcPredictionController {
     return this.wcPredictionService.getAllReferees();
   }
 
+  @Get('compare/:id')
+  async getGameTheoryComparison(@Param('id') id: string) {
+    return this.wcPredictionService.getGameTheoryComparison(parseInt(id));
+  }
+
   @Get('groups')
   async getGroupPredictions(): Promise<any[]> {
     return this.wcPredictionService.getGroupPredictions();

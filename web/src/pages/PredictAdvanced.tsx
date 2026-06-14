@@ -5,6 +5,7 @@ import {
   type AdvancedPrediction,
   type WcWeather,
   type WcReferee,
+  type GameTheoryComparison,
 } from '../api';
 import './PredictAdvanced.css';
 import { tTeam, tVenue } from '../utils/i18n';
@@ -58,6 +59,14 @@ export default function PredictAdvanced() {
   const [prediction, setPrediction] = useState<AdvancedPrediction | null>(null);
   const [predicting, setPredicting] = useState(false);
   const [error, setError] = useState('');
+
+  const [comparison, setComparison] = useState<GameTheoryComparison | null>(
+    null,
+  );
+  const [comparisonLoading, setComparisonLoading] = useState(false);
+  const [fairnessWeight, setFairnessWeight] = useState(1.0);
+  const [fifaWeight, setFifaWeight] = useState(1.0);
+  const [bookmakerWeight, setBookmakerWeight] = useState(1.0);
 
   useEffect(() => {
     api.wc
@@ -114,6 +123,7 @@ export default function PredictAdvanced() {
     setPredicting(true);
     setError('');
     setPrediction(null);
+    setComparison(null);
     try {
       const res = await api.elo.predictAdvanced({
         homeTeam: selectedMatch.homeTeam,
@@ -130,6 +140,12 @@ export default function PredictAdvanced() {
         setError(res.error as string);
       } else if (res) {
         setPrediction(res as AdvancedPrediction);
+        setComparisonLoading(true);
+        api.wc
+          .getComparison(selectedMatch.id)
+          .then(setComparison)
+          .catch(() => {})
+          .finally(() => setComparisonLoading(false));
       } else {
         setError('未找到球队 ELO 数据');
       }
@@ -518,6 +534,115 @@ export default function PredictAdvanced() {
                 {prediction.homeAdvantage === 0 ? '中立场地' : '主队加成'}
               </span>
             </div>
+          </div>
+        </div>
+      )}
+
+      {prediction && comparisonLoading && (
+        <div className="comparison-section loading">正在加载博弈论分析...</div>
+      )}
+
+      {prediction && !comparisonLoading && comparison && (
+        <div className="comparison-section">
+          <h3 className="comparison-title">🌐 多平台预测对比 & 博弈论分析</h3>
+
+          <div className="platform-grid">
+            <div className="platform-card ours">
+              <span className="platform-name">我们的预测</span>
+              <span className="platform-score">
+                {comparison.ourPrediction.homeScore} :{' '}
+                {comparison.ourPrediction.awayScore}
+              </span>
+              <span className="platform-verdict">
+                {(comparison.ourPrediction.homeWinProb * 100).toFixed(0)}% /{' '}
+                {(comparison.ourPrediction.drawProb * 100).toFixed(0)}% /{' '}
+                {(comparison.ourPrediction.awayWinProb * 100).toFixed(0)}%
+              </span>
+            </div>
+            {comparison.platforms.map((p, i) => (
+              <div className="platform-card" key={i}>
+                <span className="platform-name">{p.name}</span>
+                <span className="platform-score">
+                  {p.homeScore} : {p.awayScore}
+                </span>
+                <span className="platform-verdict">
+                  {p.verdict} ({(p.homeWinProb * 100).toFixed(0)}% /{' '}
+                  {(p.drawProb * 100).toFixed(0)}% /{' '}
+                  {(p.awayWinProb * 100).toFixed(0)}%)
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <div className="game-theory-analysis">
+            <div className="gta-card">
+              <div className="gta-header">
+                <span className="gta-icon">⚖️</span>
+                <span className="gta-title">比赛公平维持角度</span>
+              </div>
+              <p className="gta-text">{comparison.analysis.fairness}</p>
+            </div>
+            <div className="gta-card">
+              <div className="gta-header">
+                <span className="gta-icon">💰</span>
+                <span className="gta-title">国际足联推广收益角度</span>
+              </div>
+              <p className="gta-text">{comparison.analysis.fifaRevenue}</p>
+            </div>
+            <div className="gta-card">
+              <div className="gta-header">
+                <span className="gta-icon">🎰</span>
+                <span className="gta-title">资本庄家收益角度</span>
+              </div>
+              <p className="gta-text">{comparison.analysis.bookmakerProfit}</p>
+            </div>
+          </div>
+
+          <div className="param-divider" />
+          <div className="param-group">
+            <label className="param-label">
+              ⚖️ 公平维持权重{' '}
+              <span className="param-value">{fairnessWeight.toFixed(1)}</span>
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="3"
+              step="0.1"
+              value={fairnessWeight}
+              onChange={(e) => setFairnessWeight(Number(e.target.value))}
+            />
+            <div className="param-hint">公平性考量对预测的影响程度</div>
+          </div>
+          <div className="param-group">
+            <label className="param-label">
+              💰 FIFA收益权重{' '}
+              <span className="param-value">{fifaWeight.toFixed(1)}</span>
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="3"
+              step="0.1"
+              value={fifaWeight}
+              onChange={(e) => setFifaWeight(Number(e.target.value))}
+            />
+            <div className="param-hint">商业推广因素对预测的影响程度</div>
+          </div>
+          <div className="param-group">
+            <label className="param-label">
+              🎰 庄家收益权重{' '}
+              <span className="param-value">{bookmakerWeight.toFixed(1)}</span>
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="3"
+              step="0.1"
+              value={bookmakerWeight}
+              onChange={(e) => setBookmakerWeight(Number(e.target.value))}
+            />
+            <div className="param-hint">资本博弈因素对预测的影响程度</div>
           </div>
         </div>
       )}

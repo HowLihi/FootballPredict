@@ -404,6 +404,113 @@
   cursor: pointer;
 }
 
+.comparison-section {
+  margin-top: 20px;
+  background: #1a1d2e;
+  border-radius: 12px;
+  padding: 24px;
+  border: 1px solid #6366f1;
+}
+
+.comparison-section.loading {
+  text-align: center;
+  color: #818cf8;
+  padding: 20px;
+  font-size: 14px;
+}
+
+.comparison-title {
+  font-size: 16px;
+  color: #fff;
+  margin: 0 0 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #2a2d3e;
+}
+
+.platform-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.platform-card {
+  background: #252840;
+  border-radius: 10px;
+  padding: 12px 8px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid #2a2d3e;
+}
+
+.platform-card.ours {
+  border-color: #6366f1;
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.platform-name {
+  font-size: 11px;
+  color: #6b7280;
+  font-weight: 600;
+}
+
+.platform-score {
+  font-size: 20px;
+  font-weight: 800;
+  color: #d1d5db;
+}
+
+.platform-verdict {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+.game-theory-analysis {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.gta-card {
+  background: #252840;
+  border-radius: 10px;
+  padding: 14px;
+  border: 1px solid #2a2d3e;
+}
+
+.gta-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.gta-icon {
+  font-size: 16px;
+}
+
+.gta-title {
+  font-weight: 700;
+  font-size: 13px;
+  color: #d1d5db;
+}
+
+.gta-text {
+  font-size: 12px;
+  color: #9ca3af;
+  line-height: 1.7;
+  margin: 0;
+}
+
+@media (max-width: 768px) {
+  .platform-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 .prediction-result {
   margin-top: 28px;
   background: #1a1d2e;
