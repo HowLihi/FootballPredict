@@ -156,6 +156,30 @@ export interface GameTheoryComparison {
   };
 }
 
+export interface Player {
+  name: string;
+  position: string;
+  number: number;
+  overall: number;
+  strengths: string[];
+  weaknesses: string[];
+  isStar: boolean;
+  photoUrl: string;
+}
+
+export interface SquadData {
+  teamName: string;
+  players: Player[];
+  combatPower: {
+    rawAvg: number;
+    barrelAdjustment: number;
+    diminishingAdjustment: number;
+    starAdjustment: number;
+    finalPower: number;
+    analysis: string;
+  };
+}
+
 export const api = {
   elo: {
     getRankings: (page = 1, limit = 50) =>
@@ -200,6 +224,8 @@ export const api = {
     getAllReferees: () => request<WcReferee[]>('/wc/referees'),
     getComparison: (id: number) =>
       request<GameTheoryComparison | null>(`/wc/compare/${id}`),
+    getSquad: (team: string) =>
+      request<SquadData>(`/wc/squad/${encodeURIComponent(team)}`),
     getPredictions: (group?: string, round?: number) =>
       request<WcPrediction[]>(
         `/wc/predictions${buildQuery({ group, round: round?.toString() })}`,

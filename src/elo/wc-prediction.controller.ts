@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { WcPredictionService } from './wc-prediction.service';
 import { WcPrediction } from './wc-prediction.entity';
+import { generateSquad } from './squad-generator';
 
 @Controller('wc')
 export class WcPredictionController {
@@ -60,6 +61,12 @@ export class WcPredictionController {
   @Get('compare/:id')
   async getGameTheoryComparison(@Param('id') id: string) {
     return this.wcPredictionService.getGameTheoryComparison(parseInt(id));
+  }
+
+  @Get('squad/:team')
+  getSquad(@Param('team') team: string) {
+    const decoded = decodeURIComponent(team);
+    return generateSquad(decoded);
   }
 
   @Get('groups')
