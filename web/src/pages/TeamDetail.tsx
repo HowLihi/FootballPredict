@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api, type EloRating, type EloHistory } from '../api';
+import { tTeam } from '../utils/i18n';
 import './TeamDetail.css';
 
 export default function TeamDetail() {
@@ -50,7 +51,7 @@ export default function TeamDetail() {
       </Link>
 
       <div className="team-header">
-        <h1>{team.teamName}</h1>
+        <h1>{tTeam(team.teamName)}</h1>
         <div className="team-rating-badge">ELO {Math.round(team.rating)}</div>
       </div>
 
@@ -114,7 +115,7 @@ export default function TeamDetail() {
                     <td>{h.matchDate}</td>
                     <td>
                       <Link to={`/team/${encodeURIComponent(h.opponentName)}`}>
-                        {h.opponentName}
+                        {tTeam(h.opponentName)}
                       </Link>
                     </td>
                     <td>{h.isHome ? '主场' : '客场'}</td>

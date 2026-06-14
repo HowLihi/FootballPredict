@@ -7,6 +7,7 @@ import {
   type WcReferee,
 } from '../api';
 import './PredictAdvanced.css';
+import { tTeam, tVenue } from '../utils/i18n';
 
 const REFEREE_OPTIONS = [
   { value: 'lenient', label: '宽松 — 更少出牌，比赛流畅' },
@@ -169,9 +170,9 @@ export default function PredictAdvanced() {
                   onClick={() => handleSelectMatch(m)}
                 >
                   <div className="mli-teams">
-                    <span>{m.homeTeam}</span>
+                    <span>{tTeam(m.homeTeam)}</span>
                     <span className="mli-vs">vs</span>
-                    <span>{m.awayTeam}</span>
+                    <span>{tTeam(m.awayTeam)}</span>
                     {status === 'live' && (
                       <span className="mli-live-badge">● 进行中</span>
                     )}
@@ -179,7 +180,7 @@ export default function PredictAdvanced() {
                   <div className="mli-meta">
                     <span>{m.groupName}组</span>
                     <span>{formatMatchTime(m.matchDate)}</span>
-                    {m.venue && <span>📍 {m.venue}</span>}
+                    {m.venue && <span>📍 {tVenue(m.venue)}</span>}
                   </div>
                 </div>
               );
@@ -403,7 +404,7 @@ export default function PredictAdvanced() {
           <div className="result-matchup">
             <div className="result-team">
               <span className="rt-label">主队</span>
-              <span className="rt-name">{prediction.homeTeam}</span>
+              <span className="rt-name">{tTeam(prediction.homeTeam)}</span>
               <span className="rt-rating">
                 ELO {Math.round(prediction.homeRating)}
               </span>
@@ -415,15 +416,15 @@ export default function PredictAdvanced() {
               </div>
               <div className="result-verdict">
                 {maxProb === prediction.homeWinProbability
-                  ? `${prediction.homeTeam} 胜`
+                  ? `${tTeam(prediction.homeTeam)} 胜`
                   : maxProb === prediction.awayWinProbability
-                    ? `${prediction.awayTeam} 胜`
+                    ? `${tTeam(prediction.awayTeam)} 胜`
                     : '平局'}
               </div>
             </div>
             <div className="result-team">
               <span className="rt-label">客队</span>
-              <span className="rt-name">{prediction.awayTeam}</span>
+              <span className="rt-name">{tTeam(prediction.awayTeam)}</span>
               <span className="rt-rating">
                 ELO {Math.round(prediction.awayRating)}
               </span>

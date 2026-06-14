@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type WcPrediction } from '../api';
+import { tTeam, tVenue } from '../utils/i18n';
 import './RecentMatches.css';
 
 export default function RecentMatches() {
@@ -144,9 +145,9 @@ function MatchCard({
   );
   const predictedLabel =
     maxProb === match.homeWinProb
-      ? `${match.homeTeam} 胜`
+      ? `${tTeam(match.homeTeam)} 胜`
       : maxProb === match.awayWinProb
-        ? `${match.awayTeam} 胜`
+        ? `${tTeam(match.awayTeam)} 胜`
         : '平局';
 
   return (
@@ -156,14 +157,16 @@ function MatchCard({
       <div className="match-card-top">
         <span className="match-group">{match.groupName}组</span>
         <span className="match-round">第{match.round}轮</span>
-        {match.venue && <span className="match-venue">📍 {match.venue}</span>}
+        {match.venue && (
+          <span className="match-venue">📍 {tVenue(match.venue)}</span>
+        )}
       </div>
 
       <div className="match-teams">
         <div
           className={`match-team ${match.predictedResult === 'H' ? 'predicted-winner' : ''}`}
         >
-          <span className="team-name">{match.homeTeam}</span>
+          <span className="team-name">{tTeam(match.homeTeam)}</span>
           <span className="team-rating">
             ELO {Math.round(match.homeRating)}
           </span>
@@ -180,7 +183,7 @@ function MatchCard({
         <div
           className={`match-team ${match.predictedResult === 'A' ? 'predicted-winner' : ''}`}
         >
-          <span className="team-name">{match.awayTeam}</span>
+          <span className="team-name">{tTeam(match.awayTeam)}</span>
           <span className="team-rating">
             ELO {Math.round(match.awayRating)}
           </span>

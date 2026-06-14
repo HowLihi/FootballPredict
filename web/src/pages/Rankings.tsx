@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, type EloRating } from '../api';
+import { tTeam } from '../utils/i18n';
 import './Rankings.css';
 
 export default function Rankings() {
@@ -25,8 +26,10 @@ export default function Rankings() {
 
   const totalPages = Math.ceil(total / limit);
   const filtered = search
-    ? teams.filter((t) =>
-        t.teamName.toLowerCase().includes(search.toLowerCase()),
+    ? teams.filter(
+        (t) =>
+          t.teamName.toLowerCase().includes(search.toLowerCase()) ||
+          tTeam(t.teamName).toLowerCase().includes(search.toLowerCase()),
       )
     : teams;
 
@@ -57,7 +60,7 @@ export default function Rankings() {
         </div>
         <div className="summary-item">
           <span className="si-value">
-            {teams.length > 0 ? teams[0].teamName : '-'}
+            {teams.length > 0 ? tTeam(teams[0].teamName) : '-'}
           </span>
           <span className="si-label">排名第一</span>
         </div>
@@ -99,7 +102,7 @@ export default function Rankings() {
                       </td>
                       <td className="team-name">
                         <Link to={`/team/${encodeURIComponent(team.teamName)}`}>
-                          {team.teamName}
+                          {tTeam(team.teamName)}
                         </Link>
                       </td>
                       <td className="rating">{Math.round(team.rating)}</td>
