@@ -4,6 +4,7 @@ import {
   type WcPrediction,
   type AdvancedPrediction,
   type WcWeather,
+  type WcReferee,
 } from '../api';
 import './PredictAdvanced.css';
 
@@ -41,6 +42,11 @@ export default function PredictAdvanced() {
   const [weather, setWeather] = useState<WcWeather | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(false);
 
+  const [referee, setReferee] = useState<WcReferee | null>(null);
+  const [refereeLoading, setRefereeLoading] = useState(false);
+  const [allReferees, setAllReferees] = useState<WcReferee[]>([]);
+  const [manualReferee, setManualReferee] = useState(false);
+
   const [kFactor, setKFactor] = useState(32);
   const [homeAdvantage, setHomeAdvantage] = useState(100);
   const [weatherWeight, setWeatherWeight] = useState(1.0);
@@ -56,11 +62,18 @@ export default function PredictAdvanced() {
     api.wc
       .getRecentMatches()
       .then((data) => {
-        const upcoming = data.filter((m) => m.actualHomeScore === null);
+        const now = new Date();
+        const upcoming = data.filter(
+          (m) => new Date(m.matchDate.replace(' ', 'T')) > now,
+        );
         setMatches(upcoming);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
+    api.wc
+      .getAllReferees()
+      .then(setAllReferees)
+      .catch(() => {});
   }, []);
 
   const handleSelectMatch = async (m: WcPrediction) => {
@@ -70,13 +83,25 @@ export default function PredictAdvanced() {
     setError('');
     setWeather(null);
     setWeatherLoading(true);
+    setReferee(null);
+    setRefereeLoading(true);
+    setManualReferee(false);
     try {
-      const data = await api.wc.getWeather(m.id);
+      const [data, ref] = await Promise.all([
+        api.wc.getWeather(m.id),
+        api.wc.getReferee(m.id),
+      ]);
       setWeather(data);
+      if (ref) {
+        setReferee(ref);
+        setRefereeStrictness(ref.style);
+      }
     } catch {
       setWeather(null);
+      setReferee(null);
     } finally {
       setWeatherLoading(false);
+      setRefereeLoading(false);
     }
   };
 
@@ -97,7 +122,7 @@ export default function PredictAdvanced() {
         homeAdvantage,
         weatherWeight,
         refereeWeight,
-        weatherCondition: weather?.condition || 'sunny',
+        weatherCondition: weather?.during.condition || 'sunny',
         refereeStrictness,
       });
       if (res && 'error' in res) {
@@ -222,37 +247,56 @@ export default function PredictAdvanced() {
             )}
             {selectedMatch && !weatherLoading && weather && (
               <div className="weather-info-card">
-                <div className="weather-main">
-                  <span className="weather-icon">{weather.label}</span>
-                </div>
-                <div className="weather-details">
-                  {weather.temperature !== null && (
-                    <div className="weather-detail-item">
-                      <span className="wd-label">气温</span>
-                      <span className="wd-value">{weather.temperature}°C</span>
+                <div className="weather-slots">
+                  {[
+                    { key: 'before', label: '赛前2小时', data: weather.before },
+                    { key: 'during', label: '比赛期间', data: weather.during },
+                    { key: 'after', label: '赛后2小时', data: weather.after },
+                  ].map((slot) => (
+                    <div className="weather-slot" key={slot.key}>
+                      <div className="weather-slot-header">
+                        <span className="weather-icon">{slot.data.label}</span>
+                        <span className="weather-slot-label">{slot.label}</span>
+                      </div>
+                      <div className="weather-slot-details">
+                        {slot.data.temperature !== null && (
+                          <div className="weather-detail-item">
+                            <span className="wd-label">气温</span>
+                            <span className="wd-value">
+                              {slot.data.temperature}°C
+                            </span>
+                          </div>
+                        )}
+                        {slot.data.precipitation !== null && (
+                          <div className="weather-detail-item">
+                            <span className="wd-label">降水</span>
+                            <span className="wd-value">
+                              {slot.data.precipitation}%
+                            </span>
+                          </div>
+                        )}
+                        {slot.data.windSpeed !== null && (
+                          <div className="weather-detail-item">
+                            <span className="wd-label">风速</span>
+                            <span className="wd-value">
+                              {slot.data.windSpeed} km/h
+                            </span>
+                          </div>
+                        )}
+                        {slot.data.humidity !== null && (
+                          <div className="weather-detail-item">
+                            <span className="wd-label">湿度</span>
+                            <span className="wd-value">
+                              {slot.data.humidity}%
+                            </span>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  )}
-                  {weather.precipitation !== null && (
-                    <div className="weather-detail-item">
-                      <span className="wd-label">降水概率</span>
-                      <span className="wd-value">{weather.precipitation}%</span>
-                    </div>
-                  )}
-                  {weather.windSpeed !== null && (
-                    <div className="weather-detail-item">
-                      <span className="wd-label">风速</span>
-                      <span className="wd-value">{weather.windSpeed} km/h</span>
-                    </div>
-                  )}
-                  {weather.humidity !== null && (
-                    <div className="weather-detail-item">
-                      <span className="wd-label">湿度</span>
-                      <span className="wd-value">{weather.humidity}%</span>
-                    </div>
-                  )}
+                  ))}
                 </div>
                 <div className="weather-source">
-                  数据来源: Open-Meteo | {weather.matchDate} 比赛日
+                  数据来源: Open-Meteo | {weather.matchDate}
                 </div>
               </div>
             )}
@@ -282,18 +326,46 @@ export default function PredictAdvanced() {
           <div className="param-divider" />
 
           <div className="param-group">
-            <label className="param-label">裁判严格度</label>
-            <div className="referee-options">
-              {REFEREE_OPTIONS.map((r) => (
+            <label className="param-label">比赛裁判</label>
+            {!selectedMatch && (
+              <div className="weather-placeholder">请先在左侧选择一场比赛</div>
+            )}
+            {selectedMatch && refereeLoading && (
+              <div className="weather-loading">正在获取裁判信息...</div>
+            )}
+            {selectedMatch && !refereeLoading && referee && !manualReferee && (
+              <div className="referee-info-card">
+                <div className="referee-header">
+                  <span className="referee-name">👨‍⚖️ {referee.name}</span>
+                  <span className="referee-nationality">
+                    {referee.nationality}
+                  </span>
+                  <span className={`referee-badge badge-${referee.style}`}>
+                    {referee.styleLabel}
+                  </span>
+                </div>
+                <div className="referee-summary">{referee.styleSummary}</div>
                 <button
-                  key={r.value}
-                  className={`referee-btn ${refereeStrictness === r.value ? 'active' : ''}`}
-                  onClick={() => setRefereeStrictness(r.value)}
+                  className="referee-change-btn"
+                  onClick={() => setManualReferee(true)}
                 >
-                  {r.label}
+                  手动选择其他裁判
                 </button>
-              ))}
-            </div>
+              </div>
+            )}
+            {(manualReferee || (!refereeLoading && !referee)) &&
+              selectedMatch && (
+                <select
+                  className="referee-select"
+                  value={refereeStrictness}
+                  onChange={(e) => setRefereeStrictness(e.target.value)}
+                >
+                  <option value="lenient">宽松型 — 更少出牌</option>
+                  <option value="average">均衡型 — 标准判罚</option>
+                  <option value="strict">严格型 — 更多出牌</option>
+                  <option value="very_strict">极严型 — 频繁出牌</option>
+                </select>
+              )}
           </div>
 
           <div className="param-group">

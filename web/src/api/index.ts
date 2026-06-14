@@ -106,15 +106,30 @@ export interface PredictionAccuracy {
   awayWins: number;
 }
 
-export interface WcWeather {
+export interface WeatherSlot {
   condition: string;
   label: string;
   temperature: number | null;
   precipitation: number | null;
   windSpeed: number | null;
   humidity: number | null;
+}
+
+export interface WcWeather {
+  before: WeatherSlot;
+  during: WeatherSlot;
+  after: WeatherSlot;
   venue: string;
   matchDate: string;
+}
+
+export interface WcReferee {
+  name: string;
+  nationality: string;
+  style: string;
+  styleLabel: string;
+  styleSummary: string;
+  assigned: boolean;
 }
 
 export const api = {
@@ -157,6 +172,8 @@ export const api = {
   wc: {
     getRecentMatches: () => request<WcPrediction[]>('/wc/recent'),
     getWeather: (id: number) => request<WcWeather | null>(`/wc/weather/${id}`),
+    getReferee: (id: number) => request<WcReferee | null>(`/wc/referee/${id}`),
+    getAllReferees: () => request<WcReferee[]>('/wc/referees'),
     getPredictions: (group?: string, round?: number) =>
       request<WcPrediction[]>(
         `/wc/predictions${buildQuery({ group, round: round?.toString() })}`,

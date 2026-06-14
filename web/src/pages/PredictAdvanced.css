@@ -185,46 +185,63 @@
 .weather-info-card {
   background: #252840;
   border-radius: 10px;
-  padding: 14px;
+  padding: 10px;
   border: 1px solid #2a2d3e;
 }
 
-.weather-main {
+.weather-slots {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 10px;
+  gap: 6px;
+  margin-bottom: 8px;
 }
 
-.weather-icon {
-  font-size: 28px;
+.weather-slot {
+  flex: 1;
+  background: #1a1d2e;
+  border-radius: 8px;
+  padding: 8px 4px;
+  text-align: center;
 }
 
-.weather-details {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.weather-detail-item {
+.weather-slot-header {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 2px;
-  background: #1a1d2e;
-  border-radius: 6px;
-  padding: 8px 4px;
+  margin-bottom: 6px;
+}
+
+.weather-slot-label {
+  font-size: 10px;
+  color: #6b7280;
+  font-weight: 600;
+}
+
+.weather-icon {
+  font-size: 20px;
+}
+
+.weather-slot-details {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.weather-detail-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 2px 4px;
+  font-size: 11px;
 }
 
 .wd-label {
   font-size: 10px;
   color: #6b7280;
-  text-transform: uppercase;
 }
 
 .wd-value {
-  font-size: 14px;
+  font-size: 11px;
   font-weight: 700;
   color: #d1d5db;
 }
@@ -301,6 +318,90 @@
   padding: 16px;
   color: #f87171;
   margin-top: 16px;
+}
+
+.referee-info-card {
+  background: #252840;
+  border-radius: 10px;
+  padding: 12px;
+  border: 1px solid #2a2d3e;
+}
+
+.referee-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.referee-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #d1d5db;
+}
+
+.referee-nationality {
+  font-size: 11px;
+  color: #6b7280;
+  background: #1a1d2e;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.referee-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  margin-left: auto;
+}
+
+.badge-strict {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+
+.badge-average {
+  background: rgba(250, 204, 21, 0.15);
+  color: #facc15;
+}
+
+.badge-lenient {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+}
+
+.referee-summary {
+  font-size: 12px;
+  color: #9ca3af;
+  line-height: 1.6;
+  margin-bottom: 8px;
+}
+
+.referee-change-btn {
+  font-size: 11px;
+  color: #818cf8;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.referee-change-btn:hover {
+  color: #a5b4fc;
+}
+
+.referee-select {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #2a2d3e;
+  background: #252840;
+  color: #d1d5db;
+  font-size: 13px;
+  cursor: pointer;
 }
 
 .prediction-result {

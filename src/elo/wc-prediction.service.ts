@@ -36,6 +36,15 @@ export interface GroupTeamPrediction {
   predictedGoalsAgainst: number;
 }
 
+export interface WeatherSlot {
+  condition: string;
+  label: string;
+  temperature: number | null;
+  precipitation: number | null;
+  windSpeed: number | null;
+  humidity: number | null;
+}
+
 export interface KnockoutPrediction {
   round: string;
   match: string;
@@ -481,12 +490,9 @@ export class WcPredictionService {
   }
 
   async getMatchWeather(matchId: number): Promise<{
-    condition: string;
-    label: string;
-    temperature: number | null;
-    precipitation: number | null;
-    windSpeed: number | null;
-    humidity: number | null;
+    before: WeatherSlot;
+    during: WeatherSlot;
+    after: WeatherSlot;
     venue: string;
     matchDate: string;
   } | null> {
@@ -503,10 +509,15 @@ export class WcPredictionService {
       return null;
     }
 
+    const datePart = match.matchDate.split(' ')[0];
+    const timePart = match.matchDate.split(' ')[1] || '15:00:00';
+    const matchHour = parseInt(timePart.split(':')[0], 10);
+
     const weather = await this.fetchWeatherFromOpenMeteo(
       coords.lat,
       coords.lon,
-      match.matchDate,
+      datePart,
+      matchHour,
     );
 
     return {
@@ -571,14 +582,8 @@ export class WcPredictionService {
     lat: number,
     lon: number,
     date: string,
-  ): Promise<{
-    condition: string;
-    label: string;
-    temperature: number | null;
-    precipitation: number | null;
-    windSpeed: number | null;
-    humidity: number | null;
-  }> {
+    matchHour: number,
+  ): Promise<{ before: WeatherSlot; during: WeatherSlot; after: WeatherSlot }> {
     try {
       const url = 'https://api.open-meteo.com/v1/forecast';
       const params = {
@@ -602,29 +607,35 @@ export class WcPredictionService {
         return this.getDefaultWeather();
       }
 
-      const matchHour = 15;
-      const timeIndex = data.hourly.time.findIndex((t: string) =>
-        t.includes(`T${String(matchHour).padStart(2, '0')}:00`),
-      );
+      const getSlot = (hour: number): WeatherSlot => {
+        const padded = String(hour).padStart(2, '0');
+        const timeIndex = data.hourly.time.findIndex((t: string) =>
+          t.includes(`T${padded}:00`),
+        );
+        const idx =
+          timeIndex >= 0 ? timeIndex : Math.floor(data.hourly.time.length / 2);
 
-      const idx =
-        timeIndex >= 0 ? timeIndex : Math.floor(data.hourly.time.length / 2);
+        const weatherCode = data.hourly.weather_code?.[idx] ?? 0;
+        const temp = data.hourly.temperature_2m?.[idx] ?? null;
+        const precip = data.hourly.precipitation_probability?.[idx] ?? null;
+        const wind = data.hourly.wind_speed_10m?.[idx] ?? null;
+        const humidity = data.hourly.relative_humidity_2m?.[idx] ?? null;
 
-      const weatherCode = data.hourly.weather_code?.[idx] ?? 0;
-      const temp = data.hourly.temperature_2m?.[idx] ?? null;
-      const precip = data.hourly.precipitation_probability?.[idx] ?? null;
-      const wind = data.hourly.wind_speed_10m?.[idx] ?? null;
-      const humidity = data.hourly.relative_humidity_2m?.[idx] ?? null;
-
-      const { condition, label } = this.mapWeatherCode(weatherCode, temp);
+        const { condition, label } = this.mapWeatherCode(weatherCode, temp);
+        return {
+          condition,
+          label,
+          temperature: temp,
+          precipitation: precip,
+          windSpeed: wind,
+          humidity,
+        };
+      };
 
       return {
-        condition,
-        label,
-        temperature: temp,
-        precipitation: precip,
-        windSpeed: wind,
-        humidity,
+        before: getSlot(matchHour - 2),
+        during: getSlot(matchHour),
+        after: getSlot(matchHour + 2),
       };
     } catch (err: any) {
       this.logger.warn(`获取天气数据失败: ${err.message}`);
@@ -662,14 +673,11 @@ export class WcPredictionService {
   }
 
   private getDefaultWeather(): {
-    condition: string;
-    label: string;
-    temperature: null;
-    precipitation: null;
-    windSpeed: null;
-    humidity: null;
+    before: WeatherSlot;
+    during: WeatherSlot;
+    after: WeatherSlot;
   } {
-    return {
+    const slot: WeatherSlot = {
       condition: 'sunny',
       label: '☀️ 晴天',
       temperature: null,
@@ -677,5 +685,54 @@ export class WcPredictionService {
       windSpeed: null,
       humidity: null,
     };
+    return { before: slot, during: slot, after: slot };
+  }
+
+  async getMatchReferee(matchId: number): Promise<{
+    name: string;
+    nationality: string;
+    style: string;
+    styleLabel: string;
+    styleSummary: string;
+    assigned: boolean;
+  } | null> {
+    const referees = this.loadReferees();
+    if (referees.length === 0) return null;
+
+    const match = await this.wcPredictionRepository.findOne({
+      where: { id: matchId },
+    });
+    if (!match) return null;
+
+    const seed = matchId * 7 + 13;
+    const idx = seed % referees.length;
+    const ref = referees[idx];
+
+    return { ...ref, assigned: true };
+  }
+
+  getAllReferees() {
+    return this.loadReferees();
+  }
+
+  private loadReferees(): Array<{
+    name: string;
+    nationality: string;
+    style: string;
+    styleLabel: string;
+    styleSummary: string;
+  }> {
+    try {
+      const filePath = path.join(process.cwd(), 'data', 'referees.json');
+      if (!fs.existsSync(filePath)) {
+        this.logger.warn('裁判数据文件不存在');
+        return [];
+      }
+      const raw = fs.readFileSync(filePath, 'utf-8');
+      return JSON.parse(raw);
+    } catch (err: any) {
+      this.logger.warn(`加载裁判数据失败: ${err.message}`);
+      return [];
+    }
   }
 }

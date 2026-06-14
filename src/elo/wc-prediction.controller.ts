@@ -47,6 +47,16 @@ export class WcPredictionController {
     return this.wcPredictionService.getMatchWeather(parseInt(id));
   }
 
+  @Get('referee/:id')
+  async getMatchReferee(@Param('id') id: string) {
+    return this.wcPredictionService.getMatchReferee(parseInt(id));
+  }
+
+  @Get('referees')
+  async getAllReferees() {
+    return this.wcPredictionService.getAllReferees();
+  }
+
   @Get('groups')
   async getGroupPredictions(): Promise<any[]> {
     return this.wcPredictionService.getGroupPredictions();
