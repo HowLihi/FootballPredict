@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, type WcPrediction } from '../api';
 import { tTeam, tVenue } from '../utils/i18n';
+import { beijingDateString, parseBeijingDate } from '../utils/beijing-time';
 import './RecentMatches.css';
 
 export default function RecentMatches() {
@@ -25,7 +26,7 @@ export default function RecentMatches() {
     }
   };
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = beijingDateString();
 
   const liveMatches = matches.filter(
     (m) => m.actualHomeScore !== null && m.matchDate.startsWith(today),
@@ -38,14 +39,14 @@ export default function RecentMatches() {
   );
 
   const formatDate = (dateStr: string) => {
-    const d = new Date(dateStr.replace(' ', 'T'));
-    const month = d.getMonth() + 1;
-    const day = d.getDate();
+    const d = parseBeijingDate(dateStr);
+    const month = d.getUTCMonth() + 1;
+    const day = d.getUTCDate();
     const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
-    const weekday = weekdays[d.getDay()];
-    const hours = String(d.getHours()).padStart(2, '0');
-    const minutes = String(d.getMinutes()).padStart(2, '0');
-    const seconds = String(d.getSeconds()).padStart(2, '0');
+    const weekday = weekdays[d.getUTCDay()];
+    const hours = String(d.getUTCHours()).padStart(2, '0');
+    const minutes = String(d.getUTCMinutes()).padStart(2, '0');
+    const seconds = String(d.getUTCSeconds()).padStart(2, '0');
     return `${month}月${day}日 周${weekday} ${hours}:${minutes}:${seconds}`;
   };
 

@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { FootballDataApiDataSource } from '../collector/api/football-data.source';
 import { WcPredictionService } from './wc-prediction.service';
+import { beijingDateString, beijingDateAddDays } from './beijing-time';
 
 const INTERVAL_LIVE_MS = 5 * 60 * 1000;
 const INTERVAL_IDLE_MS = 30 * 60 * 1000;
@@ -81,10 +82,8 @@ export class WcScheduler implements OnModuleInit, OnModuleDestroy {
   }
 
   private async refreshWcData(): Promise<boolean> {
-    const today = new Date().toISOString().split('T')[0];
-    const twoDaysLater = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000)
-      .toISOString()
-      .split('T')[0];
+    const today = beijingDateString();
+    const twoDaysLater = beijingDateAddDays(2);
 
     this.logger.log(`开始刷新世界杯数据: ${today} ~ ${twoDaysLater}`);
 

@@ -8,6 +8,7 @@ import axios from 'axios';
 import * as https from 'https';
 import { EloService, MatchPrediction } from './elo.service';
 import { WcPrediction } from './wc-prediction.entity';
+import { beijingDateString, beijingDateAddDays } from './beijing-time';
 
 export interface WcFixture {
   date: string;
@@ -314,13 +315,8 @@ export class WcPredictionService {
   }
 
   async getRecentMatches(): Promise<WcPrediction[]> {
-    const today = new Date().toISOString().split('T')[0];
-    const weekLater = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-      .toISOString()
-      .split('T')[0];
-    const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)
-      .toISOString()
-      .split('T')[0];
+    const weekLater = beijingDateAddDays(7);
+    const threeDaysAgo = beijingDateAddDays(-3);
 
     return this.wcPredictionRepository
       .createQueryBuilder('p')
