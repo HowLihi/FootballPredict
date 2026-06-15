@@ -484,6 +484,19 @@ export class EloService {
     refereeWeight: number;
     weatherCondition: string;
     refereeStrictness: string;
+    homeForm: number;
+    awayForm: number;
+    homeStarPower: number;
+    awayStarPower: number;
+    homeTactics: string;
+    awayTactics: string;
+    homeFatigue: number;
+    awayFatigue: number;
+    homePressure: number;
+    awayPressure: number;
+    fairnessWeight: number;
+    fifaWeight: number;
+    bookmakerWeight: number;
   }): Promise<{
     homeTeam: string;
     awayTeam: string;
@@ -497,6 +510,14 @@ export class EloService {
     predictedAwayScore: number;
     weatherEffect: number;
     refereeEffect: number;
+    formEffect: number;
+    starEffect: number;
+    tacticsEffect: number;
+    fatigueEffect: number;
+    pressureEffect: number;
+    fairnessEffect: number;
+    fifaEffect: number;
+    bookmakerEffect: number;
   } | null> {
     const homeRatingEntity = await this.eloRatingRepository.findOne({
       where: { teamName: body.homeTeam },
@@ -513,23 +534,62 @@ export class EloService {
     const awayRating = awayRatingEntity.rating;
 
     const homeAdv = body.neutral ? 0 : body.homeAdvantage;
-    const effectiveHomeRating = homeRating + homeAdv;
 
-    const homeWinProb = this.expectedScore(effectiveHomeRating, awayRating);
-    const awayWinProb = this.expectedScore(awayRating, effectiveHomeRating);
+    const formEffect = this.calculateFormEffect(body.homeForm, body.awayForm);
+    const starEffect = this.calculateStarPowerEffect(
+      body.homeStarPower,
+      body.awayStarPower,
+    );
+    const tacticsEffect = this.calculateTacticsEffect(
+      body.homeTactics,
+      body.awayTactics,
+    );
+    const fatigueEffect = this.calculateFatigueEffect(
+      body.homeFatigue,
+      body.awayFatigue,
+    );
+    const pressureEffect = this.calculatePressureEffect(
+      body.homePressure,
+      body.awayPressure,
+    );
+
+    const effectiveHomeRating =
+      homeRating +
+      homeAdv +
+      formEffect * 50 +
+      starEffect * 45 +
+      tacticsEffect * 35 +
+      fatigueEffect * 35 +
+      pressureEffect * 30;
+    const effectiveAwayRating =
+      awayRating -
+      formEffect * 50 -
+      starEffect * 45 -
+      tacticsEffect * 35 -
+      fatigueEffect * 35 -
+      pressureEffect * 30;
+
+    const homeWinProb = this.expectedScore(
+      effectiveHomeRating,
+      effectiveAwayRating,
+    );
+    const awayWinProb = this.expectedScore(
+      effectiveAwayRating,
+      effectiveHomeRating,
+    );
 
     let drawProb = this.estimateDrawProbability(
       homeWinProb,
       awayWinProb,
-      homeRating,
-      awayRating,
+      effectiveHomeRating,
+      effectiveAwayRating,
     );
 
     const weatherEffect = this.calculateWeatherEffect(
       body.weatherCondition,
       body.weatherWeight,
-      homeRating,
-      awayRating,
+      effectiveHomeRating,
+      effectiveAwayRating,
     );
 
     const refereeEffect = this.calculateRefereeEffect(
@@ -544,6 +604,29 @@ export class EloService {
     adjustedAwayWin -= weatherEffect;
     drawProb += refereeEffect;
 
+    const fairnessEffect = this.calculateFairnessEffect(
+      body.fairnessWeight,
+      adjustedHomeWin,
+      adjustedAwayWin,
+    );
+    const fifaEffect = this.calculateFifaEffect(
+      body.fifaWeight,
+      homeRating,
+      awayRating,
+      adjustedHomeWin,
+      adjustedAwayWin,
+    );
+    const bookmakerEffect = this.calculateBookmakerEffect(
+      body.bookmakerWeight,
+      adjustedHomeWin,
+      adjustedAwayWin,
+      drawProb,
+    );
+
+    adjustedHomeWin += fairnessEffect + fifaEffect + bookmakerEffect.homeShift;
+    adjustedAwayWin -= fairnessEffect + fifaEffect + bookmakerEffect.homeShift;
+    drawProb += bookmakerEffect.drawShift;
+
     adjustedHomeWin = Math.max(0.01, adjustedHomeWin);
     adjustedAwayWin = Math.max(0.01, adjustedAwayWin);
     drawProb = Math.max(0.05, Math.min(0.4, drawProb));
@@ -557,8 +640,8 @@ export class EloService {
       adjustedHomeWin,
       drawProb,
       adjustedAwayWin,
-      homeRating,
-      awayRating,
+      effectiveHomeRating,
+      effectiveAwayRating,
       weatherEffect,
       refereeEffect,
     );
@@ -576,7 +659,88 @@ export class EloService {
       predictedAwayScore: awayGoals,
       weatherEffect: Math.round(weatherEffect * 1000) / 1000,
       refereeEffect: Math.round(refereeEffect * 1000) / 1000,
+      formEffect: Math.round(formEffect * 1000) / 1000,
+      starEffect: Math.round(starEffect * 1000) / 1000,
+      tacticsEffect: Math.round(tacticsEffect * 1000) / 1000,
+      fatigueEffect: Math.round(fatigueEffect * 1000) / 1000,
+      pressureEffect: Math.round(pressureEffect * 1000) / 1000,
+      fairnessEffect: Math.round(fairnessEffect * 1000) / 1000,
+      fifaEffect: Math.round(fifaEffect * 1000) / 1000,
+      bookmakerEffect: Math.round(bookmakerEffect.homeShift * 1000) / 1000,
     };
+  }
+
+  private calculateFormEffect(homeForm: number, awayForm: number): number {
+    return (homeForm - awayForm) / 10;
+  }
+
+  private calculateStarPowerEffect(
+    homeStarPower: number,
+    awayStarPower: number,
+  ): number {
+    return (homeStarPower - awayStarPower) / 10;
+  }
+
+  private calculateTacticsEffect(
+    homeTactics: string,
+    awayTactics: string,
+  ): number {
+    const tacticsMap: Record<string, number> = {
+      attacking: 0.35,
+      balanced: 0,
+      defensive: -0.25,
+    };
+    return (tacticsMap[homeTactics] || 0) - (tacticsMap[awayTactics] || 0);
+  }
+
+  private calculateFatigueEffect(
+    homeFatigue: number,
+    awayFatigue: number,
+  ): number {
+    return (awayFatigue - homeFatigue) / 10;
+  }
+
+  private calculatePressureEffect(
+    homePressure: number,
+    awayPressure: number,
+  ): number {
+    return (awayPressure - homePressure) / 10;
+  }
+
+  private calculateFairnessEffect(
+    fairnessWeight: number,
+    homeWin: number,
+    awayWin: number,
+  ): number {
+    const imbalance = homeWin - awayWin;
+    return -imbalance * 0.15 * fairnessWeight;
+  }
+
+  private calculateFifaEffect(
+    fifaWeight: number,
+    homeRating: number,
+    awayRating: number,
+    homeWin: number,
+    awayWin: number,
+  ): number {
+    const ratingDiff = homeRating - awayRating;
+    const strongerSide = ratingDiff > 0 ? 1 : -1;
+    const commercialBoost = strongerSide * 0.06 * fifaWeight;
+    const isClose = Math.abs(homeWin - awayWin) < 0.1;
+    const excitementBonus = isClose ? 0 : strongerSide * 0.03 * fifaWeight;
+    return commercialBoost + excitementBonus;
+  }
+
+  private calculateBookmakerEffect(
+    bookmakerWeight: number,
+    homeWin: number,
+    awayWin: number,
+    drawProb: number,
+  ): { homeShift: number; drawShift: number } {
+    const imbalance = homeWin - awayWin;
+    const homeShift = -imbalance * 0.08 * bookmakerWeight;
+    const drawShift = 0.05 * bookmakerWeight;
+    return { homeShift, drawShift };
   }
 
   private calculateWeatherEffect(
@@ -588,13 +752,13 @@ export class EloService {
     const weatherImpact: Record<string, number> = {
       sunny: 0,
       cloudy: 0,
-      rainy: -0.03,
-      heavy_rain: -0.06,
-      snowy: -0.05,
-      windy: -0.04,
-      hot: -0.02,
-      cold: -0.03,
-      humid: -0.02,
+      rainy: -0.08,
+      heavy_rain: -0.15,
+      snowy: -0.12,
+      windy: -0.1,
+      hot: -0.06,
+      cold: -0.08,
+      humid: -0.05,
     };
 
     const baseEffect = weatherImpact[condition] || 0;
@@ -607,10 +771,10 @@ export class EloService {
 
   private calculateRefereeEffect(strictness: string, weight: number): number {
     const strictnessImpact: Record<string, number> = {
-      lenient: 0.03,
+      lenient: 0.06,
       average: 0,
-      strict: -0.03,
-      very_strict: -0.05,
+      strict: -0.06,
+      very_strict: -0.1,
     };
 
     return (strictnessImpact[strictness] || 0) * weight;
@@ -671,5 +835,125 @@ export class EloService {
     await this.eloHistoryRepository.clear();
 
     return this.calculateFromInternationalData();
+  }
+
+  async updateEloForMatch(
+    homeTeam: string,
+    awayTeam: string,
+    homeScore: number,
+    awayScore: number,
+    neutral: boolean = true,
+    tournament: string = 'FIFA World Cup',
+  ): Promise<{
+    homeRatingBefore: number;
+    awayRatingBefore: number;
+    homeRatingAfter: number;
+    awayRatingAfter: number;
+  } | null> {
+    const homeEntity = await this.eloRatingRepository.findOne({
+      where: { teamName: homeTeam },
+    });
+    const awayEntity = await this.eloRatingRepository.findOne({
+      where: { teamName: awayTeam },
+    });
+
+    if (!homeEntity || !awayEntity) {
+      this.logger.warn(
+        `无法增量更新ELO: ${homeTeam}(${homeEntity ? '✓' : '✗'}) vs ${awayTeam}(${awayEntity ? '✓' : '✗'})`,
+      );
+      return null;
+    }
+
+    const homeRatingBefore = homeEntity.rating;
+    const awayRatingBefore = awayEntity.rating;
+
+    const homeAdv = neutral ? 0 : this.config.homeAdvantage;
+    const effectiveHomeRating = homeRatingBefore + homeAdv;
+
+    const expectedHome = this.expectedScore(
+      effectiveHomeRating,
+      awayRatingBefore,
+    );
+    const expectedAway = 1 - expectedHome;
+
+    let actualHome: number;
+    let actualAway: number;
+    if (homeScore > awayScore) {
+      actualHome = 1;
+      actualAway = 0;
+    } else if (homeScore < awayScore) {
+      actualHome = 0;
+      actualAway = 1;
+    } else {
+      actualHome = 0.5;
+      actualAway = 0.5;
+    }
+
+    const tournamentWeight = this.getTournamentWeight(tournament);
+    const goalFactor = this.goalMultiplierFactor(homeScore, awayScore);
+    const effectiveK = this.config.kFactor * tournamentWeight * goalFactor;
+
+    const homeRatingChange = effectiveK * (actualHome - expectedHome);
+    const awayRatingChange = effectiveK * (actualAway - expectedAway);
+
+    const homeRatingAfter =
+      Math.round((homeRatingBefore + homeRatingChange) * 10) / 10;
+    const awayRatingAfter =
+      Math.round((awayRatingBefore + awayRatingChange) * 10) / 10;
+
+    homeEntity.rating = homeRatingAfter;
+    awayEntity.rating = awayRatingAfter;
+
+    if (homeScore > awayScore) {
+      homeEntity.wins++;
+      awayEntity.losses++;
+    } else if (homeScore < awayScore) {
+      homeEntity.losses++;
+      awayEntity.wins++;
+    } else {
+      homeEntity.draws++;
+      awayEntity.draws++;
+    }
+    homeEntity.gamesPlayed++;
+    awayEntity.gamesPlayed++;
+    homeEntity.goalsFor += homeScore;
+    homeEntity.goalsAgainst += awayScore;
+    awayEntity.goalsFor += awayScore;
+    awayEntity.goalsAgainst += homeScore;
+
+    await this.eloRatingRepository.save([homeEntity, awayEntity]);
+
+    const resultChar =
+      homeScore > awayScore ? 'W' : homeScore < awayScore ? 'L' : 'D';
+    const history = new EloHistory();
+    history.teamName = homeTeam;
+    history.rating = homeRatingAfter;
+    history.ratingChange = Math.round(homeRatingChange * 10) / 10;
+    history.opponentName = awayTeam;
+    history.opponentRating = awayRatingBefore;
+    history.result = resultChar;
+    history.homeScore = homeScore;
+    history.awayScore = awayScore;
+    history.isHome = !neutral;
+    history.tournament = tournament;
+    history.matchDate = new Date().toISOString().split('T')[0];
+    history.calculationDate = new Date().toISOString().split('T')[0];
+
+    try {
+      await this.eloHistoryRepository.insert(history);
+    } catch (err: any) {
+      this.logger.warn(`保存ELO历史记录失败: ${err.message}`);
+    }
+
+    this.logger.log(
+      `ELO增量更新: ${homeTeam} ${homeRatingBefore}->${homeRatingAfter} (${homeRatingChange > 0 ? '+' : ''}${Math.round(homeRatingChange * 10) / 10}), ${awayTeam} ${awayRatingBefore}->${awayRatingAfter} (${awayRatingChange > 0 ? '+' : ''}${Math.round(awayRatingChange * 10) / 10})`,
+    );
+
+    return {
+      homeRatingBefore,
+      awayRatingBefore,
+      homeRatingAfter,
+      awayRatingAfter,
+    };
   }
 }

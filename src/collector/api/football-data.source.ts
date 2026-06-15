@@ -199,6 +199,153 @@ export class FootballDataApiDataSource implements IDataSource {
    * @param apiStatus API 返回的原始状态码
    * @returns 统一的状态码
    */
+  async searchTeam(name: string): Promise<{
+    id: number;
+    name: string;
+    shortName: string;
+    crest: string;
+  } | null> {
+    try {
+      this.logger.log(`搜索球队: ${name}`);
+      const response = await this.apiClient.get('/teams', {
+        params: { name },
+      });
+      const teams = response.data.teams || [];
+      if (teams.length === 0) {
+        this.logger.warn(`未找到球队: ${name}`);
+        return null;
+      }
+
+      const nameLower = name.toLowerCase();
+      const exactMatch = teams.find(
+        (t: any) =>
+          t.name?.toLowerCase() === nameLower ||
+          t.shortName?.toLowerCase() === nameLower ||
+          t.tla?.toLowerCase() === nameLower,
+      );
+      const team = exactMatch || teams[0];
+
+      return {
+        id: team.id,
+        name: team.name,
+        shortName: team.shortName || team.tla || team.name,
+        crest: team.crest || '',
+      };
+    } catch (error: any) {
+      this.logger.error(`搜索球队失败: ${error.message}`);
+      return null;
+    }
+  }
+
+  async fetchTeamSquad(teamId: number): Promise<
+    Array<{
+      id: number;
+      name: string;
+      position: string;
+      dateOfBirth: string;
+      nationality: string;
+    }>
+  > {
+    try {
+      this.logger.log(`获取球队阵容: teamId=${teamId}`);
+      const response = await this.apiClient.get(`/teams/${teamId}`);
+      return response.data.squad || [];
+    } catch (error: any) {
+      this.logger.error(
+        `获取球队阵容失败(teamId=${teamId}): ${error.message}，尝试通过联赛接口获取`,
+      );
+      return this.fetchSquadViaCompetitions(teamId);
+    }
+  }
+
+  private async fetchSquadViaCompetitions(teamId: number): Promise<
+    Array<{
+      id: number;
+      name: string;
+      position: string;
+      dateOfBirth: string;
+      nationality: string;
+    }>
+  > {
+    const currentYear = new Date().getFullYear();
+    const season = currentYear - 1;
+    const competitions = ['PL', 'BL1', 'SA', 'PD', 'FL1', 'CL'];
+
+    for (const code of competitions) {
+      try {
+        this.logger.log(`通过联赛 ${code} 搜索 teamId=${teamId} 的阵容...`);
+        const response = await this.apiClient.get(
+          `/competitions/${code}/teams`,
+          { params: { season } },
+        );
+        const teams = response.data.teams || [];
+        const team = teams.find((t: any) => t.id === teamId);
+        if (team && team.squad && team.squad.length > 0) {
+          this.logger.log(
+            `在联赛 ${code} 中找到 teamId=${teamId} 的阵容: ${team.squad.length} 名球员`,
+          );
+          return team.squad;
+        }
+      } catch (error: any) {
+        this.logger.warn(`联赛 ${code} 查询失败: ${error.message}`);
+      }
+    }
+
+    this.logger.warn(`在所有联赛中均未找到 teamId=${teamId} 的阵容`);
+    return [];
+  }
+
+  async fetchAllCompetitionTeams(): Promise<
+    Array<{
+      id: number;
+      name: string;
+      shortName: string;
+      crest: string;
+      squad: Array<{
+        id: number;
+        name: string;
+        position: string;
+        dateOfBirth: string;
+        nationality: string;
+      }>;
+    }>
+  > {
+    const currentYear = new Date().getFullYear();
+    const season = currentYear - 1;
+    const competitions = ['PL', 'BL1', 'SA', 'PD', 'FL1'];
+    const allTeams: any[] = [];
+    const seenIds = new Set<number>();
+
+    for (const code of competitions) {
+      try {
+        this.logger.log(`获取联赛 ${code} 的球队和阵容...`);
+        const response = await this.apiClient.get(
+          `/competitions/${code}/teams`,
+          { params: { season } },
+        );
+        const teams = response.data.teams || [];
+        for (const team of teams) {
+          if (!seenIds.has(team.id)) {
+            seenIds.add(team.id);
+            allTeams.push({
+              id: team.id,
+              name: team.name,
+              shortName: team.shortName || team.tla || team.name,
+              crest: team.crest || '',
+              squad: team.squad || [],
+            });
+          }
+        }
+        this.logger.log(`联赛 ${code}: 获取 ${teams.length} 支球队`);
+      } catch (error: any) {
+        this.logger.warn(`联赛 ${code} 获取失败: ${error.message}`);
+      }
+    }
+
+    this.logger.log(`共获取 ${allTeams.length} 支球队的阵容数据`);
+    return allTeams;
+  }
+
   private mapStatus(apiStatus: string): 'SCHEDULED' | 'LIVE' | 'FINISHED' {
     switch (apiStatus) {
       case 'FINISHED':

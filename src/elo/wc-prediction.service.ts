@@ -8,7 +8,7 @@ import axios from 'axios';
 import * as https from 'https';
 import { EloService, MatchPrediction } from './elo.service';
 import { WcPrediction } from './wc-prediction.entity';
-import { beijingDateString, beijingDateAddDays } from './beijing-time';
+import { beijingDateAddDays, venueToBeijingTime } from './beijing-time';
 
 export interface WcFixture {
   date: string;
@@ -19,6 +19,8 @@ export interface WcFixture {
   round: number;
   venue: string;
   neutral: boolean;
+  homeScore: number | null;
+  awayScore: number | null;
 }
 
 export interface GroupPrediction {
@@ -60,6 +62,9 @@ export interface KnockoutPrediction {
 const TEAM_NAME_ALIASES: Record<string, string> = {
   USA: 'United States',
   Curacao: 'Curaçao',
+  'Bosnia & Herzegovina': 'Bosnia and Herzegovina',
+  "Côte d'Ivoire": 'Ivory Coast',
+  "Cote d'Ivoire": 'Ivory Coast',
 };
 
 @Injectable()
@@ -143,9 +148,16 @@ export class WcPredictionService {
     entity.homeAdvantage = prediction.homeAdvantage;
     entity.venue = fixture.venue;
     entity.neutral = fixture.neutral;
-    entity.actualHomeScore = null;
-    entity.actualAwayScore = null;
-    entity.resultCorrect = null;
+    entity.actualHomeScore = fixture.homeScore;
+    entity.actualAwayScore = fixture.awayScore;
+    entity.resultCorrect =
+      fixture.homeScore !== null && fixture.awayScore !== null
+        ? this.checkResultCorrect(
+            fixture.homeScore,
+            fixture.awayScore,
+            predictedResult,
+          )
+        : null;
 
     return entity;
   }
@@ -170,6 +182,16 @@ export class WcPredictionService {
       return 'A';
     }
     return 'D';
+  }
+
+  private checkResultCorrect(
+    homeScore: number,
+    awayScore: number,
+    predictedResult: string,
+  ): boolean {
+    const actualResult =
+      homeScore > awayScore ? 'H' : homeScore < awayScore ? 'A' : 'D';
+    return actualResult === predictedResult;
   }
 
   private predictScore(prediction: MatchPrediction): {
@@ -298,6 +320,8 @@ export class WcPredictionService {
           }),
         )
         .on('data', (record: Record<string, string>) => {
+          const hs = record['home_score']?.trim();
+          const as_ = record['away_score']?.trim();
           fixtures.push({
             date: record['date'],
             time: record['match_time'] || '15:00:00',
@@ -307,6 +331,8 @@ export class WcPredictionService {
             round: parseInt(record['round'], 10),
             venue: record['venue']?.trim() || '',
             neutral: record['neutral']?.toUpperCase() === 'TRUE',
+            homeScore: hs ? parseInt(hs, 10) : null,
+            awayScore: as_ ? parseInt(as_, 10) : null,
           });
         })
         .on('end', () => resolve(fixtures))
@@ -318,13 +344,21 @@ export class WcPredictionService {
     const weekLater = beijingDateAddDays(7);
     const threeDaysAgo = beijingDateAddDays(-3);
 
-    return this.wcPredictionRepository
+    const sqlStart = beijingDateAddDays(-3 - 1);
+    const sqlEnd = beijingDateAddDays(7 + 1);
+
+    const allMatches = await this.wcPredictionRepository
       .createQueryBuilder('p')
-      .where('p.matchDate >= :threeDaysAgo', { threeDaysAgo })
-      .andWhere('p.matchDate <= :weekLater', { weekLater })
+      .where('p.matchDate >= :sqlStart', { sqlStart })
+      .andWhere('p.matchDate <= :sqlEnd', { sqlEnd })
       .orderBy('p.matchDate', 'ASC')
       .addOrderBy('p.id', 'ASC')
       .getMany();
+
+    return allMatches.filter((m) => {
+      const bjDate = venueToBeijingTime(m.matchDate, m.venue);
+      return bjDate >= threeDaysAgo && bjDate <= weekLater;
+    });
   }
 
   async getPredictions(
@@ -904,6 +938,53 @@ export class WcPredictionService {
       this.logger.warn(`LLM博弈论分析调用失败: ${err.message}，使用默认分析`);
       return this.getDefaultGameTheoryAnalysis(match, our, platforms);
     }
+  }
+
+  async regenerateUpcomingPredictions(): Promise<number> {
+    const upcoming = await this.wcPredictionRepository.find({
+      where: { actualHomeScore: null as unknown as undefined },
+    });
+
+    if (upcoming.length === 0) {
+      this.logger.log('没有需要重新预测的未开始比赛');
+      return 0;
+    }
+
+    let updated = 0;
+
+    for (const pred of upcoming) {
+      const homeTeam = this.resolveTeamName(pred.homeTeam);
+      const awayTeam = this.resolveTeamName(pred.awayTeam);
+
+      const prediction = await this.eloService.predictMatch(
+        homeTeam,
+        awayTeam,
+        pred.neutral,
+      );
+
+      if (!prediction) {
+        continue;
+      }
+
+      const predictedResult = this.determinePredictedResult(prediction);
+      const { homeGoals, awayGoals } = this.predictScore(prediction);
+
+      pred.homeRating = prediction.homeRating;
+      pred.awayRating = prediction.awayRating;
+      pred.homeWinProb = prediction.homeWinProbability;
+      pred.drawProb = prediction.drawProbability;
+      pred.awayWinProb = prediction.awayWinProbability;
+      pred.predictedResult = predictedResult;
+      pred.predictedScoreHome = homeGoals;
+      pred.predictedScoreAway = awayGoals;
+      pred.homeAdvantage = prediction.homeAdvantage;
+
+      await this.wcPredictionRepository.save(pred);
+      updated++;
+    }
+
+    this.logger.log(`已重新生成 ${updated} 场未开始比赛的预测`);
+    return updated;
   }
 
   private getDefaultGameTheoryAnalysis(

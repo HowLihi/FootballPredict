@@ -1,20 +1,20 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, type WcPrediction } from '../api';
 import { tTeam, tVenue } from '../utils/i18n';
-import { beijingDateString, parseBeijingDate } from '../utils/beijing-time';
+import {
+  beijingNow,
+  parseBeijingDate,
+  parseBeijingParts,
+} from '../utils/beijing-time';
 import './RecentMatches.css';
 
 export default function RecentMatches() {
   const [matches, setMatches] = useState<WcPrediction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  useEffect(() => {
-    loadMatches();
-  }, []);
-
-  const loadMatches = async () => {
-    setLoading(true);
+  const loadMatches = useCallback(async () => {
     setError('');
     try {
       const data = await api.wc.getRecentMatches();
@@ -24,30 +24,34 @@ export default function RecentMatches() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const today = beijingDateString();
+  useEffect(() => {
+    loadMatches();
+    timerRef.current = setInterval(loadMatches, 5 * 60 * 1000);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [loadMatches]);
 
+  const now = beijingNow();
+  const finishedMatches = matches.filter(
+    (m) => m.actualHomeScore !== null && m.actualAwayScore !== null,
+  );
   const liveMatches = matches.filter(
-    (m) => m.actualHomeScore !== null && m.matchDate.startsWith(today),
+    (m) =>
+      m.actualHomeScore === null &&
+      parseBeijingDate(m.matchDate) <= now &&
+      parseBeijingDate(m.matchDate).getTime() + 2 * 60 * 60 * 1000 >
+        now.getTime(),
   );
   const upcomingMatches = matches.filter(
-    (m) => m.actualHomeScore === null && m.matchDate >= today,
-  );
-  const finishedMatches = matches.filter(
-    (m) => m.actualHomeScore !== null && m.matchDate < today,
+    (m) => m.actualHomeScore === null && parseBeijingDate(m.matchDate) > now,
   );
 
   const formatDate = (dateStr: string) => {
-    const d = parseBeijingDate(dateStr);
-    const month = d.getUTCMonth() + 1;
-    const day = d.getUTCDate();
-    const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
-    const weekday = weekdays[d.getUTCDay()];
-    const hours = String(d.getUTCHours()).padStart(2, '0');
-    const minutes = String(d.getUTCMinutes()).padStart(2, '0');
-    const seconds = String(d.getUTCSeconds()).padStart(2, '0');
-    return `${month}月${day}日 周${weekday} ${hours}:${minutes}:${seconds}`;
+    const b = parseBeijingParts(dateStr);
+    return `${b.month}月${b.day}日 周${b.weekday} ${b.hours}:${b.minutes}:${b.seconds}`;
   };
 
   const groupByDate = (list: WcPrediction[]) => {
@@ -65,13 +69,6 @@ export default function RecentMatches() {
       <div className="recent-header">
         <h1>🏟️ 近期比赛</h1>
         <p className="page-desc">2026 FIFA 世界杯 — 近一周比赛动态</p>
-        <button
-          className="btn btn-secondary"
-          onClick={loadMatches}
-          disabled={loading}
-        >
-          {loading ? '刷新中...' : '🔄 刷新'}
-        </button>
       </div>
 
       {error && <div className="error-msg">加载失败: {error}</div>}
@@ -151,6 +148,7 @@ function MatchCard({
         ? `${tTeam(match.awayTeam)} 胜`
         : '平局';
 
+  const timeParts = parseBeijingParts(match.matchDate);
   return (
     <div
       className={`match-card ${isLive ? 'live' : ''} ${isFinished ? 'finished' : ''}`}
@@ -158,6 +156,10 @@ function MatchCard({
       <div className="match-card-top">
         <span className="match-group">{match.groupName}组</span>
         <span className="match-round">第{match.round}轮</span>
+        <span className="match-time">
+          {timeParts.month}月{timeParts.day}日 {timeParts.hours}:
+          {timeParts.minutes}
+        </span>
         {match.venue && (
           <span className="match-venue">📍 {tVenue(match.venue)}</span>
         )}

@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { FootballDataApiDataSource } from '../collector/api/football-data.source';
 import { WcPredictionService } from './wc-prediction.service';
+import { EloService } from './elo.service';
 import { beijingDateString, beijingDateAddDays } from './beijing-time';
 
 const INTERVAL_LIVE_MS = 5 * 60 * 1000;
@@ -31,6 +32,7 @@ export class WcScheduler implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly footballDataApi: FootballDataApiDataSource,
     private readonly wcPredictionService: WcPredictionService,
+    private readonly eloService: EloService,
   ) {}
 
   onModuleInit() {
@@ -146,6 +148,16 @@ export class WcScheduler implements OnModuleInit, OnModuleDestroy {
 
         if (result) {
           updated++;
+
+          await this.eloService.updateEloForMatch(
+            homeTeam,
+            awayTeam,
+            match.homeScore,
+            match.awayScore,
+            true,
+            'FIFA World Cup',
+          );
+
           this.logger.log(
             `更新比分: ${homeTeam} ${match.homeScore}-${match.awayScore} ${awayTeam} (预测${result.resultCorrect ? '✅正确' : '❌错误'})`,
           );
@@ -159,6 +171,15 @@ export class WcScheduler implements OnModuleInit, OnModuleDestroy {
 
     if (updated > 0) {
       this.logger.log(`✅ 共更新 ${updated} 场已结束比赛的结果`);
+
+      try {
+        this.logger.log('开始重新生成未开始比赛的预测...');
+        const regenCount =
+          await this.wcPredictionService.regenerateUpcomingPredictions();
+        this.logger.log(`✅ 已重新生成 ${regenCount} 场比赛的预测`);
+      } catch (err: any) {
+        this.logger.error(`重新生成预测失败: ${err.message}`, err.stack);
+      }
     }
   }
 }

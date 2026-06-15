@@ -16,9 +16,7 @@ export default function Layout() {
             </NavLink>
             <NavLink to="/predict">调参预测</NavLink>
             <NavLink to="/rankings">历史数据</NavLink>
-            <NavLink to="/players" className="nav-disabled">
-              球员信息
-            </NavLink>
+            <NavLink to="/players">球员信息</NavLink>
           </nav>
         </div>
       </header>

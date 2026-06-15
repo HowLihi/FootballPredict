@@ -45,6 +45,121 @@
   cursor: pointer;
 }
 
+.refresh-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid #6366f1;
+  background: #252840;
+  color: #818cf8;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.refresh-btn:hover {
+  background: #6366f1;
+  color: #fff;
+}
+
+.refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.real-data-badge {
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: 8px;
+  padding: 10px 16px;
+  color: #34d399;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sim-data-badge {
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: 8px;
+  padding: 10px 16px;
+  color: #fbbf24;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cpc-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.team-crest {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+}
+
+.squad-stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.squad-stat {
+  background: #252840;
+  border-radius: 10px;
+  padding: 12px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.squad-stat-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: #818cf8;
+}
+
+.squad-stat-label {
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.player-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.player-age {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+.player-nationality {
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.player-rating-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.player-market-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: #34d399;
+  background: rgba(34, 197, 94, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
 .players-empty {
   text-align: center;
   padding: 60px 20px;
@@ -315,6 +430,9 @@
 
 @media (max-width: 768px) {
   .cpc-breakdown {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .squad-stats-row {
     grid-template-columns: repeat(2, 1fr);
   }
   .theory-legend {

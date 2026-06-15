@@ -9,13 +9,24 @@ import {
 } from '@nestjs/common';
 import { WcPredictionService } from './wc-prediction.service';
 import { WcPrediction } from './wc-prediction.entity';
-import { generateSquad } from './squad-generator';
+import { SquadService } from './squad.service';
+import { venueToBeijingTime } from './beijing-time';
 
 @Controller('wc')
 export class WcPredictionController {
   private readonly logger = new Logger(WcPredictionController.name);
 
-  constructor(private readonly wcPredictionService: WcPredictionService) {}
+  constructor(
+    private readonly wcPredictionService: WcPredictionService,
+    private readonly squadService: SquadService,
+  ) {}
+
+  private toBeijing(predictions: WcPrediction[]): WcPrediction[] {
+    return predictions.map((p) => ({
+      ...p,
+      matchDate: venueToBeijingTime(p.matchDate, p.venue),
+    }));
+  }
 
   @Post('predict')
   async generatePredictions(): Promise<{
@@ -32,15 +43,17 @@ export class WcPredictionController {
     @Query('group') group?: string,
     @Query('round') round?: string,
   ): Promise<WcPrediction[]> {
-    return this.wcPredictionService.getPredictions(
+    const data = await this.wcPredictionService.getPredictions(
       group,
       round ? parseInt(round) : undefined,
     );
+    return this.toBeijing(data);
   }
 
   @Get('recent')
   async getRecentMatches(): Promise<WcPrediction[]> {
-    return this.wcPredictionService.getRecentMatches();
+    const data = await this.wcPredictionService.getRecentMatches();
+    return this.toBeijing(data);
   }
 
   @Get('weather/:id')
@@ -64,9 +77,15 @@ export class WcPredictionController {
   }
 
   @Get('squad/:team')
-  getSquad(@Param('team') team: string) {
+  async getSquad(@Param('team') team: string) {
     const decoded = decodeURIComponent(team);
-    return generateSquad(decoded);
+    return this.squadService.getSquad(decoded);
+  }
+
+  @Post('squad/:team/refresh')
+  async refreshSquad(@Param('team') team: string) {
+    const decoded = decodeURIComponent(team);
+    return this.squadService.refreshSquad(decoded);
   }
 
   @Get('groups')

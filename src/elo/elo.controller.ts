@@ -81,7 +81,8 @@ export class EloController {
 
   @Post('predict-advanced')
   async predictAdvanced(
-    @Body() body: {
+    @Body()
+    body: {
       homeTeam: string;
       awayTeam: string;
       neutral: boolean;
@@ -91,6 +92,19 @@ export class EloController {
       refereeWeight: number;
       weatherCondition: string;
       refereeStrictness: string;
+      homeForm: number;
+      awayForm: number;
+      homeStarPower: number;
+      awayStarPower: number;
+      homeTactics: string;
+      awayTactics: string;
+      homeFatigue: number;
+      awayFatigue: number;
+      homePressure: number;
+      awayPressure: number;
+      fairnessWeight: number;
+      fifaWeight: number;
+      bookmakerWeight: number;
     },
   ): Promise<
     | (MatchPrediction & {
@@ -98,6 +112,14 @@ export class EloController {
         predictedAwayScore: number;
         weatherEffect: number;
         refereeEffect: number;
+        formEffect: number;
+        starEffect: number;
+        tacticsEffect: number;
+        fatigueEffect: number;
+        pressureEffect: number;
+        fairnessEffect: number;
+        fifaEffect: number;
+        bookmakerEffect: number;
       })
     | { error: string }
     | null

@@ -110,6 +110,11 @@
   font-weight: 600;
 }
 
+.match-time {
+  color: #facc15;
+  font-size: 12px;
+}
+
 .match-venue {
   margin-left: auto;
 }

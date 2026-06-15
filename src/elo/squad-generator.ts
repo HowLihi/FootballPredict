@@ -7,6 +7,10 @@ export interface Player {
   weaknesses: string[];
   isStar: boolean;
   photoUrl: string;
+  age?: number;
+  nationality?: string;
+  marketValue?: number;
+  club?: string;
 }
 
 export interface Squad {
@@ -20,6 +24,8 @@ export interface Squad {
     finalPower: number;
     analysis: string;
   };
+  teamCrest?: string;
+  isRealData?: boolean;
 }
 
 const POSITIONS = [
@@ -202,7 +208,22 @@ export function generateSquad(teamName: string): Squad {
     }
 
     const isStar = i < 3;
-    const photoUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(firstName)}+${encodeURIComponent(lastName)}&background=6366f1&color=fff&size=80`;
+    const age = 22 + Math.floor(seededRandom(seed + 6) * 14);
+    const ageFactor =
+      age >= 24 && age <= 29 ? 1.0 : age >= 30 ? 0.7 : age >= 22 ? 0.85 : 0.6;
+    const posBase =
+      pos === 'ST' || pos === 'CAM' || pos === 'LW' || pos === 'RW'
+        ? 45
+        : pos === 'CM' || pos === 'CDM'
+          ? 30
+          : pos === 'GK'
+            ? 18
+            : 25;
+    const marketValue =
+      Math.round(
+        posBase * ageFactor * Math.pow((overall - 60) / 30, 2.5) * 2.8 * 10,
+      ) / 10;
+    const photoUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(firstName)}+${encodeURIComponent(lastName)}&background=${isStar ? 'fbbf24' : '6366f1'}&color=fff&size=80`;
 
     players.push({
       name: `${firstName} ${lastName}`,
@@ -213,13 +234,15 @@ export function generateSquad(teamName: string): Squad {
       weaknesses,
       isStar,
       photoUrl,
+      age,
+      marketValue,
     });
   }
 
   const sorted = [...players].sort((a, b) => b.overall - a.overall);
   const combatPower = calculateCombatPower(teamName, sorted);
 
-  return { teamName, players, combatPower };
+  return { teamName, players, combatPower, isRealData: false };
 }
 
 function calculateCombatPower(
@@ -247,6 +270,8 @@ function calculateCombatPower(
   );
   const starAdjustment = clamp(starBonus, 0, 3);
 
+  const totalMarketValue = sorted.reduce((s, p) => s + (p.marketValue || 0), 0);
+
   const finalPower = clamp(
     rawAvg + barrelAdjustment + diminishingAdjustment + starAdjustment,
     50,
@@ -258,6 +283,7 @@ function calculateCombatPower(
     `木桶效应: ${barrelAdjustment > 0 ? '+' : ''}${barrelAdjustment.toFixed(1)}（末5人均值 ${weakestAvg.toFixed(1)}，短板拖累明显）`,
     `边际递减: ${diminishingAdjustment > 0 ? '+' : ''}${diminishingAdjustment.toFixed(1)}（前5人均值 ${strongestAvg.toFixed(1)}，优势边际效益递减）`,
     `球星加成: +${starAdjustment.toFixed(1)}（${starPlayers.length}名球星，国际足联推广利好）`,
+    `全队身价: €${(totalMarketValue / 100).toFixed(1)}亿`,
     `综合战斗力: ${finalPower.toFixed(1)}`,
   ].join('\n');
 

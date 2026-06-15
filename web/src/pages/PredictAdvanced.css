@@ -93,12 +93,28 @@
   }
 }
 
-.mli-meta {
+.mli-header {
   display: flex;
-  gap: 10px;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.mli-group {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+.mli-time {
+  font-size: 11px;
+  color: #facc15;
+  font-variant-numeric: tabular-nums;
+}
+
+.mli-venue {
   font-size: 11px;
   color: #6b7280;
-  margin-top: 4px;
+  margin-top: 2px;
 }
 
 .no-data-small {

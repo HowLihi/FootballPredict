@@ -3,6 +3,21 @@ import { api, type SquadData, type WcPrediction } from '../api';
 import { tTeam } from '../utils/i18n';
 import './Players.css';
 
+function formatMarketValue(value: number | undefined): string {
+  if (value === undefined || value === null) return '-';
+  if (value >= 100) return `€${(value / 100).toFixed(1)}亿`;
+  if (value >= 1) return `€${value.toFixed(0)}M`;
+  return `€${(value * 1000).toFixed(0)}万`;
+}
+
+function overallColor(overall: number): string {
+  if (overall >= 88) return '#fbbf24';
+  if (overall >= 82) return '#34d399';
+  if (overall >= 75) return '#818cf8';
+  if (overall >= 70) return '#60a5fa';
+  return '#9ca3af';
+}
+
 export default function Players() {
   const [teams, setTeams] = useState<string[]>([]);
   const [selectedTeam, setSelectedTeam] = useState('');
@@ -39,6 +54,20 @@ export default function Players() {
     }
   };
 
+  const handleRefresh = async () => {
+    if (!selectedTeam) return;
+    setLoading(true);
+    setError('');
+    try {
+      const data = await api.wc.refreshSquad(selectedTeam);
+      setSquad(data);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const positionOrder: Record<string, number> = {
     GK: 0,
     CB: 1,
@@ -62,11 +91,20 @@ export default function Players() {
   const starPlayers = sortedPlayers.filter((p) => p.isStar);
   const nonStarPlayers = sortedPlayers.filter((p) => !p.isStar);
 
+  const totalMarketValue = squad
+    ? squad.players.reduce((s, p) => s + (p.marketValue || 0), 0)
+    : 0;
+
+  const avgAge = squad
+    ? squad.players.filter((p) => p.age).reduce((s, p) => s + (p.age || 0), 0) /
+        squad.players.filter((p) => p.age).length || 0
+    : 0;
+
   return (
     <div className="players-page">
       <div className="players-page-header">
         <h1>👤 球员信息</h1>
-        <p className="page-desc">选择球队，查看26人大名单及真实战斗力评估</p>
+        <p className="page-desc">选择球队，查看真实大名单及战斗力评估</p>
       </div>
 
       <div className="team-selector-bar">
@@ -83,6 +121,15 @@ export default function Players() {
             </option>
           ))}
         </select>
+        {selectedTeam && (
+          <button
+            className="refresh-btn"
+            onClick={handleRefresh}
+            disabled={loading}
+          >
+            🔄 刷新数据
+          </button>
+        )}
       </div>
 
       {!selectedTeam && !loading && (
@@ -97,8 +144,30 @@ export default function Players() {
 
       {squad && !loading && (
         <div className="squad-content">
+          {squad.isRealData && (
+            <div className="real-data-badge">
+              ✅ 真实数据 — 来自 football-data.org API
+            </div>
+          )}
+          {!squad.isRealData && (
+            <div className="sim-data-badge">
+              ⚠️ 模拟数据 — API暂无该球队数据，以下为算法生成
+            </div>
+          )}
+
           <div className="combat-power-card">
-            <h2 className="cpc-title">📊 {tTeam(squad.teamName)} 战斗力评估</h2>
+            <div className="cpc-header-row">
+              <h2 className="cpc-title">
+                📊 {tTeam(squad.teamName)} 战斗力评估
+              </h2>
+              {squad.teamCrest && (
+                <img
+                  src={squad.teamCrest}
+                  alt={squad.teamName}
+                  className="team-crest"
+                />
+              )}
+            </div>
             <div className="cpc-main-score">
               <span className="cpc-value">
                 {squad.combatPower.finalPower.toFixed(1)}
@@ -133,6 +202,30 @@ export default function Players() {
                 <span className="cpc-item-label">球星加成</span>
               </div>
             </div>
+
+            <div className="squad-stats-row">
+              <div className="squad-stat">
+                <span className="squad-stat-value">
+                  {formatMarketValue(totalMarketValue)}
+                </span>
+                <span className="squad-stat-label">全队总身价</span>
+              </div>
+              <div className="squad-stat">
+                <span className="squad-stat-value">
+                  {avgAge > 0 ? avgAge.toFixed(1) : '-'}
+                </span>
+                <span className="squad-stat-label">平均年龄</span>
+              </div>
+              <div className="squad-stat">
+                <span className="squad-stat-value">{squad.players.length}</span>
+                <span className="squad-stat-label">球员人数</span>
+              </div>
+              <div className="squad-stat">
+                <span className="squad-stat-value">{starPlayers.length}</span>
+                <span className="squad-stat-label">球星数量</span>
+              </div>
+            </div>
+
             <div className="cpc-analysis">
               <div className="cpc-analysis-title">📝 理论分析</div>
               <pre className="cpc-analysis-text">
@@ -183,8 +276,28 @@ export default function Players() {
                 <div className="player-info">
                   <span className="player-number">#{p.number}</span>
                   <span className="player-name">{p.name}</span>
-                  <span className="player-position">{p.position}</span>
-                  <span className="player-overall">{p.overall}</span>
+                  <div className="player-meta">
+                    <span className="player-position">{p.position}</span>
+                    {p.age && <span className="player-age">{p.age}岁</span>}
+                    {p.nationality && (
+                      <span className="player-nationality">
+                        {p.nationality}
+                      </span>
+                    )}
+                  </div>
+                  <div className="player-rating-row">
+                    <span
+                      className="player-overall"
+                      style={{ color: overallColor(p.overall) }}
+                    >
+                      {p.overall}
+                    </span>
+                    {p.marketValue !== undefined && (
+                      <span className="player-market-value">
+                        {formatMarketValue(p.marketValue)}
+                      </span>
+                    )}
+                  </div>
                   <div className="player-strengths">
                     {p.strengths.map((s, i) => (
                       <span key={i} className="tag strength">
@@ -214,8 +327,28 @@ export default function Players() {
                 <div className="player-info">
                   <span className="player-number">#{p.number}</span>
                   <span className="player-name">{p.name}</span>
-                  <span className="player-position">{p.position}</span>
-                  <span className="player-overall">{p.overall}</span>
+                  <div className="player-meta">
+                    <span className="player-position">{p.position}</span>
+                    {p.age && <span className="player-age">{p.age}岁</span>}
+                    {p.nationality && (
+                      <span className="player-nationality">
+                        {p.nationality}
+                      </span>
+                    )}
+                  </div>
+                  <div className="player-rating-row">
+                    <span
+                      className="player-overall"
+                      style={{ color: overallColor(p.overall) }}
+                    >
+                      {p.overall}
+                    </span>
+                    {p.marketValue !== undefined && (
+                      <span className="player-market-value">
+                        {formatMarketValue(p.marketValue)}
+                      </span>
+                    )}
+                  </div>
                   <div className="player-strengths">
                     {p.strengths.map((s, i) => (
                       <span key={i} className="tag strength">

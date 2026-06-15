@@ -56,6 +56,14 @@ export interface AdvancedPrediction extends MatchPrediction {
   predictedAwayScore: number;
   weatherEffect: number;
   refereeEffect: number;
+  formEffect: number;
+  starEffect: number;
+  tacticsEffect: number;
+  fatigueEffect: number;
+  pressureEffect: number;
+  fairnessEffect: number;
+  fifaEffect: number;
+  bookmakerEffect: number;
 }
 
 export interface WcPrediction {
@@ -165,6 +173,10 @@ export interface Player {
   weaknesses: string[];
   isStar: boolean;
   photoUrl: string;
+  age?: number;
+  nationality?: string;
+  marketValue?: number;
+  club?: string;
 }
 
 export interface SquadData {
@@ -178,6 +190,8 @@ export interface SquadData {
     finalPower: number;
     analysis: string;
   };
+  teamCrest?: string;
+  isRealData?: boolean;
 }
 
 export const api = {
@@ -208,6 +222,19 @@ export const api = {
       refereeWeight: number;
       weatherCondition: string;
       refereeStrictness: string;
+      homeForm: number;
+      awayForm: number;
+      homeStarPower: number;
+      awayStarPower: number;
+      homeTactics: string;
+      awayTactics: string;
+      homeFatigue: number;
+      awayFatigue: number;
+      homePressure: number;
+      awayPressure: number;
+      fairnessWeight: number;
+      fifaWeight: number;
+      bookmakerWeight: number;
     }) =>
       request<AdvancedPrediction | { error: string } | null>(
         '/elo/predict-advanced',
@@ -226,6 +253,10 @@ export const api = {
       request<GameTheoryComparison | null>(`/wc/compare/${id}`),
     getSquad: (team: string) =>
       request<SquadData>(`/wc/squad/${encodeURIComponent(team)}`),
+    refreshSquad: (team: string) =>
+      request<SquadData>(`/wc/squad/${encodeURIComponent(team)}/refresh`, {
+        method: 'POST',
+      }),
     getPredictions: (group?: string, round?: number) =>
       request<WcPrediction[]>(
         `/wc/predictions${buildQuery({ group, round: round?.toString() })}`,
