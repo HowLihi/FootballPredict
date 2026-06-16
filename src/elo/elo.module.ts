@@ -6,6 +6,7 @@ import { WcPredictionService } from './wc-prediction.service';
 import { WcPredictionController } from './wc-prediction.controller';
 import { WcScheduler } from './wc-scheduler';
 import { SquadService } from './squad.service';
+import { PlayerMarketValueService } from './player-market-value.service';
 import { EloRating } from './elo-rating.entity';
 import { EloHistory } from './elo-history.entity';
 import { WcPrediction } from './wc-prediction.entity';
@@ -18,7 +19,13 @@ import { CollectorModule } from '../collector/collector.module';
     CollectorModule,
   ],
   controllers: [EloController, WcPredictionController],
-  providers: [EloService, WcPredictionService, WcScheduler, SquadService],
+  providers: [
+    EloService,
+    WcPredictionService,
+    WcScheduler,
+    SquadService,
+    PlayerMarketValueService,
+  ],
   exports: [EloService, WcPredictionService, SquadService],
 })
 export class EloModule {}

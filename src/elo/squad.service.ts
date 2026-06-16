@@ -6,6 +6,7 @@ import { FootballDataApiDataSource } from '../collector/api/football-data.source
 import { EloService } from './elo.service';
 import { Player, Squad, generateSquad } from './squad-generator';
 import { NATIONAL_TEAMS } from './national-teams';
+import { PlayerMarketValueService } from './player-market-value.service';
 
 const POSITION_MAP: Record<string, string> = {
   Goalkeeper: 'GK',
@@ -118,6 +119,7 @@ export class SquadService {
     private readonly playerRepo: Repository<TeamPlayer>,
     private readonly footballDataApi: FootballDataApiDataSource,
     private readonly eloService: EloService,
+    private readonly marketValueService: PlayerMarketValueService,
   ) {}
 
   private async ensureTeamIndex(): Promise<Map<string, TeamSearchResult>> {
@@ -221,6 +223,7 @@ export class SquadService {
         dateOfBirth: string;
         nationality: string;
         club: string;
+        marketValue?: number;
       }>;
     },
   ): Promise<Squad> {
@@ -237,7 +240,23 @@ export class SquadService {
         index,
         nationalTeamData.players.length,
       );
-      const marketValue = this.estimateMarketValue(specificPos, age, overall);
+
+      // 优先使用真实身价：national-teams.ts 硬编码 > 缓存 > 估算
+      let marketValue: number;
+      if (p.marketValue !== undefined && p.marketValue !== null) {
+        marketValue = p.marketValue;
+      } else {
+        const cachedValue = this.marketValueService.getCachedValue(
+          p.name,
+          p.club,
+        );
+        if (cachedValue !== undefined && cachedValue !== null) {
+          marketValue = cachedValue;
+        } else {
+          marketValue = this.estimateMarketValue(specificPos, age, overall);
+        }
+      }
+
       const isStar = index < 3;
       const strengths = this.getStrengths(specificPos, overall);
       const weaknesses = this.getWeaknesses(specificPos, overall);
@@ -376,7 +395,15 @@ export class SquadService {
         index,
         apiSquad.length,
       );
-      const marketValue = this.estimateMarketValue(specificPos, age, overall);
+
+      // 优先使用缓存中的真实身价
+      let marketValue: number;
+      const cachedValue = this.marketValueService.getCachedValue(p.name, '');
+      if (cachedValue !== undefined && cachedValue !== null) {
+        marketValue = cachedValue;
+      } else {
+        marketValue = this.estimateMarketValue(specificPos, age, overall);
+      }
       const isStar = index < 3;
       const strengths = this.getStrengths(specificPos, overall);
       const weaknesses = this.getWeaknesses(specificPos, overall);

@@ -4,6 +4,7 @@ export interface NationalTeamPlayer {
   dateOfBirth: string;
   nationality: string;
   club: string;
+  marketValue?: number;
 }
 
 export interface NationalTeamData {
