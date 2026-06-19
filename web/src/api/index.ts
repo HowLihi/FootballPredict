@@ -61,6 +61,8 @@ export interface AdvancedPrediction extends MatchPrediction {
   tacticsEffect: number;
   fatigueEffect: number;
   pressureEffect: number;
+  injuryEffect: number;
+  stakesEffect: number;
   fairnessEffect: number;
   fifaEffect: number;
   bookmakerEffect: number;
@@ -164,6 +166,56 @@ export interface GameTheoryComparison {
   };
 }
 
+export interface MatchSummaryItem {
+  category: string;
+  icon: string;
+  title: string;
+  detail: string;
+  impact:
+    | 'home_positive'
+    | 'home_negative'
+    | 'away_positive'
+    | 'away_negative'
+    | 'neutral';
+}
+
+export interface MatchSummaryData {
+  highlights: MatchSummaryItem[];
+  keyEvents: string[];
+  refereeNote: string;
+  venueNote: string;
+  generalNote: string;
+}
+
+export interface MatchParamsData {
+  matchId: number;
+  kFactor: number;
+  homeAdvantage: number;
+  neutral: boolean;
+  weatherWeight: number;
+  weatherCondition: string;
+  refereeWeight: number;
+  refereeStrictness: string;
+  homeForm: number;
+  awayForm: number;
+  homeStarPower: number;
+  awayStarPower: number;
+  homeTactics: string;
+  awayTactics: string;
+  homeFatigue: number;
+  awayFatigue: number;
+  homePressure: number;
+  awayPressure: number;
+  homeInjuryImpact: number;
+  awayInjuryImpact: number;
+  homeStakes: number;
+  awayStakes: number;
+  fairnessWeight: number;
+  fifaWeight: number;
+  bookmakerWeight: number;
+  matchSummary: MatchSummaryData | null;
+}
+
 export interface Player {
   name: string;
   position: string;
@@ -172,6 +224,7 @@ export interface Player {
   strengths: string[];
   weaknesses: string[];
   isStar: boolean;
+  starLevel: 'super' | 'star' | 'normal';
   photoUrl: string;
   age?: number;
   nationality?: string;
@@ -192,6 +245,43 @@ export interface SquadData {
   };
   teamCrest?: string;
   isRealData?: boolean;
+}
+
+export interface EnsemblePrediction {
+  homeTeam: string;
+  awayTeam: string;
+  homeRating: number;
+  awayRating: number;
+  homeAdvantage: number;
+  finalHomeWin: number;
+  finalDraw: number;
+  finalAwayWin: number;
+  predictedHomeScore: number;
+  predictedAwayScore: number;
+  individualModels: {
+    elo: { homeWin: number; draw: number; awayWin: number };
+    odds: { homeWin: number; draw: number; awayWin: number };
+    poisson: {
+      homeWin: number;
+      draw: number;
+      awayWin: number;
+      homeGoalsExpected: number;
+      awayGoalsExpected: number;
+      mostLikelyScore: string;
+    };
+  };
+  modelContributions: Array<{
+    modelName: string;
+    weight: number;
+    contribution: number;
+  }>;
+  confidence: 'high' | 'medium' | 'low';
+}
+
+export interface EnsembleQuickPrediction {
+  homeWin: number;
+  draw: number;
+  awayWin: number;
 }
 
 export const api = {
@@ -232,6 +322,10 @@ export const api = {
       awayFatigue: number;
       homePressure: number;
       awayPressure: number;
+      homeInjuryImpact: number;
+      awayInjuryImpact: number;
+      homeStakes: number;
+      awayStakes: number;
       fairnessWeight: number;
       fifaWeight: number;
       bookmakerWeight: number;
@@ -269,6 +363,59 @@ export const api = {
         predictions: WcPrediction[];
         groupPredictions: GroupPrediction[];
       }>('/wc/predict', { method: 'POST' }),
+    refreshScores: () =>
+      request<{ updated: number }>('/wc/refresh-scores', {
+        method: 'POST',
+      }),
+    gatherIntelligence: (matchId: number) =>
+      request<{
+        summary: MatchSummaryData;
+      }>(`/wc/gather-intelligence/${matchId}`, { method: 'POST' }),
+    quantifyIntelligence: (matchId: number, summary: MatchSummaryData) =>
+      request<{
+        params: {
+          homeForm: number;
+          awayForm: number;
+          homeStarPower: number;
+          awayStarPower: number;
+          homeTactics: string;
+          awayTactics: string;
+          homeFatigue: number;
+          awayFatigue: number;
+          homePressure: number;
+          awayPressure: number;
+          homeInjuryImpact: number;
+          awayInjuryImpact: number;
+          homeStakes: number;
+          awayStakes: number;
+          refereeStrictness: string;
+          weatherCondition: string;
+        };
+        reasoning: string;
+      }>(`/wc/quantify-intelligence/${matchId}`, {
+        method: 'POST',
+        body: JSON.stringify({ summary }),
+      }),
+    getMatchParams: (matchId: number) =>
+      request<MatchParamsData | null>(`/wc/match-params/${matchId}`),
+    saveMatchParams: (
+      matchId: number,
+      params: Omit<MatchParamsData, 'matchId'>,
+    ) =>
+      request<MatchParamsData>(`/wc/match-params/${matchId}`, {
+        method: 'POST',
+        body: JSON.stringify(params),
+      }),
+  },
+  ensemble: {
+    predict: (home: string, away: string, neutral = false) =>
+      request<EnsemblePrediction | { error: string } | null>(
+        `/api/ensemble/predict?home=${encodeURIComponent(home)}&away=${encodeURIComponent(away)}&neutral=${neutral}`,
+      ),
+    predictQuick: (home: string, away: string, neutral = false) =>
+      request<EnsembleQuickPrediction | { error: string }>(
+        `/api/ensemble/predict-quick?home=${encodeURIComponent(home)}&away=${encodeURIComponent(away)}&neutral=${neutral}`,
+      ),
   },
 };
 

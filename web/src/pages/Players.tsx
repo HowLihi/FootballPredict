@@ -88,8 +88,9 @@ export default function Players() {
       )
     : [];
 
-  const starPlayers = sortedPlayers.filter((p) => p.isStar);
-  const nonStarPlayers = sortedPlayers.filter((p) => !p.isStar);
+  const superStarPlayers = sortedPlayers.filter((p) => p.starLevel === 'super');
+  const normalStarPlayers = sortedPlayers.filter((p) => p.starLevel === 'star');
+  const nonStarPlayers = sortedPlayers.filter((p) => p.starLevel === 'normal');
 
   const totalMarketValue = squad
     ? squad.players.reduce((s, p) => s + (p.marketValue || 0), 0)
@@ -203,7 +204,7 @@ export default function Players() {
               </div>
             </div>
 
-            <div className="squad-stats-row">
+            <div className="squad-stats-row squad-stats-5">
               <div className="squad-stat">
                 <span className="squad-stat-value">
                   {formatMarketValue(totalMarketValue)}
@@ -220,9 +221,17 @@ export default function Players() {
                 <span className="squad-stat-value">{squad.players.length}</span>
                 <span className="squad-stat-label">球员人数</span>
               </div>
-              <div className="squad-stat">
-                <span className="squad-stat-value">{starPlayers.length}</span>
-                <span className="squad-stat-label">球星数量</span>
+              <div className="squad-stat super-stat">
+                <span className="squad-stat-value">
+                  {superStarPlayers.length}
+                </span>
+                <span className="squad-stat-label">超级球星</span>
+              </div>
+              <div className="squad-stat star-stat">
+                <span className="squad-stat-value">
+                  {normalStarPlayers.length}
+                </span>
+                <span className="squad-stat-label">球星</span>
               </div>
             </div>
 
@@ -265,11 +274,65 @@ export default function Players() {
             </div>
           </div>
 
-          <h3 className="squad-section-title">
-            ⭐ 球星核心 ({starPlayers.length}人)
+          <h3 className="squad-section-title super-section-title">
+            🔥 超级球星 ({superStarPlayers.length}人)
+            <span className="section-subtitle">身价 ≥ 1亿欧</span>
           </h3>
           <div className="players-grid">
-            {starPlayers.map((p) => (
+            {superStarPlayers.map((p) => (
+              <div key={p.number} className="player-card super-star-card">
+                <img src={p.photoUrl} alt={p.name} className="player-photo" />
+                <span className="player-star-badge super-badge">🔥</span>
+                <div className="player-info">
+                  <span className="player-number">#{p.number}</span>
+                  <span className="player-name">{p.name}</span>
+                  <div className="player-meta">
+                    <span className="player-position">{p.position}</span>
+                    {p.age && <span className="player-age">{p.age}岁</span>}
+                    {p.nationality && (
+                      <span className="player-nationality">
+                        {p.nationality}
+                      </span>
+                    )}
+                  </div>
+                  <div className="player-rating-row">
+                    <span
+                      className="player-overall"
+                      style={{ color: overallColor(p.overall) }}
+                    >
+                      {p.overall}
+                    </span>
+                    {p.marketValue !== undefined && (
+                      <span className="player-market-value super-mv">
+                        {formatMarketValue(p.marketValue)}
+                      </span>
+                    )}
+                  </div>
+                  <div className="player-strengths">
+                    {p.strengths.map((s, i) => (
+                      <span key={i} className="tag strength">
+                        ✓ {s}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="player-weaknesses">
+                    {p.weaknesses.map((w, i) => (
+                      <span key={i} className="tag weakness">
+                        ✗ {w}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <h3 className="squad-section-title star-section-title">
+            ⭐ 球星 ({normalStarPlayers.length}人)
+            <span className="section-subtitle">身价 ≥ 1000万欧</span>
+          </h3>
+          <div className="players-grid">
+            {normalStarPlayers.map((p) => (
               <div key={p.number} className="player-card star-card">
                 <img src={p.photoUrl} alt={p.name} className="player-photo" />
                 <span className="player-star-badge">⭐</span>

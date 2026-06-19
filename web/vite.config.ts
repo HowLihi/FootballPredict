@@ -8,6 +8,7 @@ export default defineConfig({
       '/elo': 'http://localhost:3000',
       '/wc': 'http://localhost:3000',
       '/collector': 'http://localhost:3000',
+      '/api/ensemble': 'http://localhost:3000',
     },
   },
 });

@@ -346,6 +346,41 @@ export class FootballDataApiDataSource implements IDataSource {
     return allTeams;
   }
 
+  async fetchWorldCupTeams(): Promise<
+    Array<{
+      id: number;
+      name: string;
+      shortName: string;
+      crest: string;
+      squad: Array<{
+        id: number;
+        name: string;
+        position: string;
+        dateOfBirth: string;
+        nationality: string;
+      }>;
+    }>
+  > {
+    try {
+      this.logger.log('获取世界杯国家队阵容...');
+      const response = await this.apiClient.get('/competitions/WC/teams', {
+        params: { season: 2026 },
+      });
+      const teams = response.data.teams || [];
+      this.logger.log(`获取到 ${teams.length} 支世界杯国家队`);
+      return teams.map((team: any) => ({
+        id: team.id,
+        name: team.name,
+        shortName: team.shortName || team.tla || team.name,
+        crest: team.crest || '',
+        squad: team.squad || [],
+      }));
+    } catch (error: any) {
+      this.logger.error(`获取世界杯国家队失败: ${error.message}`);
+      return [];
+    }
+  }
+
   private mapStatus(apiStatus: string): 'SCHEDULED' | 'LIVE' | 'FINISHED' {
     switch (apiStatus) {
       case 'FINISHED':

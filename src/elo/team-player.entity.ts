@@ -51,6 +51,14 @@ export class TeamPlayer {
   @Column({ name: 'is_star', type: 'boolean', default: false })
   isStar: boolean;
 
+  @Column({
+    name: 'star_level',
+    type: 'varchar',
+    length: 10,
+    default: 'normal',
+  })
+  starLevel: string;
+
   @Column({ name: 'strengths', type: 'simple-array', nullable: true })
   strengths: string[];
 

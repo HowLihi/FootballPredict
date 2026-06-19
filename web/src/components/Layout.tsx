@@ -24,7 +24,9 @@ export default function Layout() {
         <Outlet />
       </main>
       <footer className="app-footer">
-        <p>FootballPredict — 基于 ELO 评分的足球比赛预测系统</p>
+        <p>
+          FootballPredict — 基于 ELO + 赔率 + 泊松 多模型集成的足球比赛预测系统
+        </p>
       </footer>
     </div>
   );

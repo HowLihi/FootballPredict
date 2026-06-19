@@ -10,6 +10,7 @@ import { EloRating } from './elo/elo-rating.entity';
 import { EloHistory } from './elo/elo-history.entity';
 import { WcPrediction } from './elo/wc-prediction.entity';
 import { TeamPlayer } from './elo/team-player.entity';
+import { MatchParams } from './elo/match-params.entity';
 
 /**
  * 根模块 - NestJS 应用的入口模块
@@ -31,7 +32,15 @@ import { TeamPlayer } from './elo/team-player.entity';
       database: 'data/football.db',
 
       // 自动加载实体类，TypeORM 会根据实体定义自动创建/更新表结构
-      entities: [Match, Odds, EloRating, EloHistory, WcPrediction, TeamPlayer],
+      entities: [
+        Match,
+        Odds,
+        EloRating,
+        EloHistory,
+        WcPrediction,
+        TeamPlayer,
+        MatchParams,
+      ],
 
       // synchronize: true 会自动同步实体定义到数据库表结构
       // ⚠️ 生产环境应设为 false，使用 migration 管理数据库变更

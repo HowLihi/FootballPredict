@@ -474,30 +474,41 @@ export class EloService {
     return drawProb;
   }
 
-  async predictAdvanced(body: {
-    homeTeam: string;
-    awayTeam: string;
-    neutral: boolean;
-    kFactor: number;
-    homeAdvantage: number;
-    weatherWeight: number;
-    refereeWeight: number;
-    weatherCondition: string;
-    refereeStrictness: string;
-    homeForm: number;
-    awayForm: number;
-    homeStarPower: number;
-    awayStarPower: number;
-    homeTactics: string;
-    awayTactics: string;
-    homeFatigue: number;
-    awayFatigue: number;
-    homePressure: number;
-    awayPressure: number;
-    fairnessWeight: number;
-    fifaWeight: number;
-    bookmakerWeight: number;
-  }): Promise<{
+  async predictAdvanced(
+    body: {
+      homeTeam: string;
+      awayTeam: string;
+      neutral: boolean;
+      kFactor: number;
+      homeAdvantage: number;
+      weatherWeight: number;
+      refereeWeight: number;
+      weatherCondition: string;
+      refereeStrictness: string;
+      homeForm: number;
+      awayForm: number;
+      homeStarPower: number;
+      awayStarPower: number;
+      homeTactics: string;
+      awayTactics: string;
+      homeFatigue: number;
+      awayFatigue: number;
+      homePressure: number;
+      awayPressure: number;
+      homeInjuryImpact: number;
+      awayInjuryImpact: number;
+      homeStakes: number;
+      awayStakes: number;
+      fairnessWeight: number;
+      fifaWeight: number;
+      bookmakerWeight: number;
+    },
+    baseHomeWin?: number,
+    baseDraw?: number,
+    baseAwayWin?: number,
+    poissonHomeExpected?: number,
+    poissonAwayExpected?: number,
+  ): Promise<{
     homeTeam: string;
     awayTeam: string;
     homeRating: number;
@@ -515,6 +526,8 @@ export class EloService {
     tacticsEffect: number;
     fatigueEffect: number;
     pressureEffect: number;
+    injuryEffect: number;
+    stakesEffect: number;
     fairnessEffect: number;
     fifaEffect: number;
     bookmakerEffect: number;
@@ -552,38 +565,83 @@ export class EloService {
       body.homePressure,
       body.awayPressure,
     );
-
-    const effectiveHomeRating =
-      homeRating +
-      homeAdv +
-      formEffect * 50 +
-      starEffect * 45 +
-      tacticsEffect * 35 +
-      fatigueEffect * 35 +
-      pressureEffect * 30;
-    const effectiveAwayRating =
-      awayRating -
-      formEffect * 50 -
-      starEffect * 45 -
-      tacticsEffect * 35 -
-      fatigueEffect * 35 -
-      pressureEffect * 30;
-
-    const homeWinProb = this.expectedScore(
-      effectiveHomeRating,
-      effectiveAwayRating,
+    const injuryEffect = this.calculateInjuryEffect(
+      body.homeInjuryImpact,
+      body.awayInjuryImpact,
     );
-    const awayWinProb = this.expectedScore(
-      effectiveAwayRating,
-      effectiveHomeRating,
+    const stakesEffect = this.calculateStakesEffect(
+      body.homeStakes,
+      body.awayStakes,
     );
 
-    let drawProb = this.estimateDrawProbability(
-      homeWinProb,
-      awayWinProb,
-      effectiveHomeRating,
-      effectiveAwayRating,
-    );
+    let homeWinProb: number;
+    let awayWinProb: number;
+    let drawProb: number;
+    let effectiveHomeRating: number;
+    let effectiveAwayRating: number;
+    let ensembleShift = 0;
+
+    if (
+      baseHomeWin !== undefined &&
+      baseDraw !== undefined &&
+      baseAwayWin !== undefined
+    ) {
+      effectiveHomeRating = homeRating;
+      effectiveAwayRating = awayRating;
+
+      const ELO_SHIFT_FACTOR = 0.00144;
+      const totalRatingDelta =
+        formEffect * 50 +
+        starEffect * 45 +
+        tacticsEffect * 35 +
+        fatigueEffect * 35 +
+        pressureEffect * 30 +
+        injuryEffect * 40 +
+        stakesEffect * 20;
+      ensembleShift = totalRatingDelta * ELO_SHIFT_FACTOR;
+
+      homeWinProb = baseHomeWin + ensembleShift;
+      awayWinProb = baseAwayWin - ensembleShift;
+      drawProb = baseDraw;
+    } else {
+      effectiveHomeRating =
+        homeRating +
+        homeAdv +
+        formEffect * 50 +
+        starEffect * 45 +
+        tacticsEffect * 35 +
+        fatigueEffect * 35 +
+        pressureEffect * 30 +
+        injuryEffect * 40 +
+        stakesEffect * 20;
+      effectiveAwayRating =
+        awayRating -
+        formEffect * 50 -
+        starEffect * 45 -
+        tacticsEffect * 35 -
+        fatigueEffect * 35 -
+        pressureEffect * 30 -
+        injuryEffect * 40 -
+        stakesEffect * 20;
+
+      homeWinProb = this.expectedScore(
+        effectiveHomeRating,
+        effectiveAwayRating,
+      );
+      awayWinProb = this.expectedScore(
+        effectiveAwayRating,
+        effectiveHomeRating,
+      );
+
+      drawProb = this.estimateDrawProbability(
+        homeWinProb,
+        awayWinProb,
+        effectiveHomeRating,
+        effectiveAwayRating,
+      );
+    }
+
+    const isEnsembleBased = baseHomeWin !== undefined;
 
     const weatherEffect = this.calculateWeatherEffect(
       body.weatherCondition,
@@ -597,8 +655,16 @@ export class EloService {
       body.refereeWeight,
     );
 
-    let adjustedHomeWin = homeWinProb * (1 - drawProb);
-    let adjustedAwayWin = awayWinProb * (1 - drawProb);
+    let adjustedHomeWin: number;
+    let adjustedAwayWin: number;
+
+    if (isEnsembleBased) {
+      adjustedHomeWin = homeWinProb;
+      adjustedAwayWin = awayWinProb;
+    } else {
+      adjustedHomeWin = homeWinProb * (1 - drawProb);
+      adjustedAwayWin = awayWinProb * (1 - drawProb);
+    }
 
     adjustedHomeWin += weatherEffect;
     adjustedAwayWin -= weatherEffect;
@@ -627,23 +693,36 @@ export class EloService {
     adjustedAwayWin -= fairnessEffect + fifaEffect + bookmakerEffect.homeShift;
     drawProb += bookmakerEffect.drawShift;
 
-    adjustedHomeWin = Math.max(0.01, adjustedHomeWin);
-    adjustedAwayWin = Math.max(0.01, adjustedAwayWin);
-    drawProb = Math.max(0.05, Math.min(0.4, drawProb));
+    const hasAdjustments =
+      weatherEffect !== 0 ||
+      refereeEffect !== 0 ||
+      fairnessEffect !== 0 ||
+      fifaEffect !== 0 ||
+      bookmakerEffect.homeShift !== 0 ||
+      bookmakerEffect.drawShift !== 0 ||
+      (isEnsembleBased && ensembleShift !== 0);
 
-    const total = adjustedHomeWin + adjustedAwayWin + drawProb;
-    adjustedHomeWin /= total;
-    adjustedAwayWin /= total;
-    drawProb /= total;
+    if (hasAdjustments) {
+      adjustedHomeWin = Math.max(0.01, adjustedHomeWin);
+      adjustedAwayWin = Math.max(0.01, adjustedAwayWin);
+      drawProb = Math.max(0.05, Math.min(0.4, drawProb));
+
+      const total = adjustedHomeWin + adjustedAwayWin + drawProb;
+      adjustedHomeWin /= total;
+      adjustedAwayWin /= total;
+      drawProb /= total;
+    }
 
     const { homeGoals, awayGoals } = this.predictScoreAdvanced(
       adjustedHomeWin,
       drawProb,
       adjustedAwayWin,
-      effectiveHomeRating,
-      effectiveAwayRating,
+      isEnsembleBased ? homeRating : effectiveHomeRating,
+      isEnsembleBased ? awayRating : effectiveAwayRating,
       weatherEffect,
       refereeEffect,
+      poissonHomeExpected,
+      poissonAwayExpected,
     );
 
     return {
@@ -664,6 +743,8 @@ export class EloService {
       tacticsEffect: Math.round(tacticsEffect * 1000) / 1000,
       fatigueEffect: Math.round(fatigueEffect * 1000) / 1000,
       pressureEffect: Math.round(pressureEffect * 1000) / 1000,
+      injuryEffect: Math.round(injuryEffect * 1000) / 1000,
+      stakesEffect: Math.round(stakesEffect * 1000) / 1000,
       fairnessEffect: Math.round(fairnessEffect * 1000) / 1000,
       fifaEffect: Math.round(fifaEffect * 1000) / 1000,
       bookmakerEffect: Math.round(bookmakerEffect.homeShift * 1000) / 1000,
@@ -705,6 +786,20 @@ export class EloService {
     awayPressure: number,
   ): number {
     return (awayPressure - homePressure) / 10;
+  }
+
+  private calculateInjuryEffect(
+    homeInjuryImpact: number,
+    awayInjuryImpact: number,
+  ): number {
+    return (awayInjuryImpact - homeInjuryImpact) / 10;
+  }
+
+  private calculateStakesEffect(
+    homeStakes: number,
+    awayStakes: number,
+  ): number {
+    return (homeStakes - awayStakes) / 10;
   }
 
   private calculateFairnessEffect(
@@ -764,9 +859,10 @@ export class EloService {
     const baseEffect = weatherImpact[condition] || 0;
 
     const ratingDiff = homeRating - awayRating;
-    const direction = ratingDiff > 0 ? -1 : 1;
+    const adaptationFactor = Math.min(0.4, Math.abs(ratingDiff) / 2000);
+    const direction = ratingDiff > 0 ? 1 : -1;
 
-    return baseEffect * weight * direction;
+    return baseEffect * weight * (1 - adaptationFactor * direction);
   }
 
   private calculateRefereeEffect(strictness: string, weight: number): number {
@@ -788,6 +884,8 @@ export class EloService {
     awayRating: number,
     weatherEffect: number,
     refereeEffect: number,
+    poissonHomeExpected?: number,
+    poissonAwayExpected?: number,
   ): { homeGoals: number; awayGoals: number } {
     const ratingDiff = homeRating - awayRating;
     const baseGoals = 1.3;
@@ -795,13 +893,44 @@ export class EloService {
     let homeExpected = baseGoals + ratingDiff / 800;
     let awayExpected = baseGoals - ratingDiff / 800;
 
-    homeExpected = Math.max(0.3, homeExpected);
-    awayExpected = Math.max(0.3, awayExpected);
+    const absRatingDiff = Math.abs(ratingDiff);
+    if (absRatingDiff > 300) {
+      const extraDiff = absRatingDiff - 300;
+      const additionalReduction = extraDiff / 800;
+      if (ratingDiff > 0) {
+        awayExpected = Math.max(0, awayExpected - additionalReduction);
+      } else {
+        homeExpected = Math.max(0, homeExpected - additionalReduction);
+      }
+    }
 
-    if (homeWinProb > awayWinProb + 0.15) {
-      homeExpected += 0.4;
-    } else if (awayWinProb > homeWinProb + 0.15) {
-      awayExpected += 0.4;
+    if (
+      poissonHomeExpected !== undefined &&
+      poissonAwayExpected !== undefined
+    ) {
+      homeExpected = homeExpected * 0.5 + poissonHomeExpected * 0.5;
+      awayExpected = awayExpected * 0.5 + poissonAwayExpected * 0.5;
+    } else {
+      homeExpected = Math.max(0.2, homeExpected);
+      awayExpected = Math.max(0.2, awayExpected);
+    }
+
+    const winDiff = homeWinProb - awayWinProb;
+    if (winDiff > 0.1) {
+      const bonusScale = Math.max(0.1, 1 - winDiff);
+      homeExpected += 0.3 * bonusScale;
+    } else if (winDiff < -0.1) {
+      const bonusScale = Math.max(0.1, 1 + winDiff);
+      awayExpected += 0.3 * bonusScale;
+    }
+
+    if (Math.abs(winDiff) > 0.8) {
+      const dominantReduction = (Math.abs(winDiff) - 0.8) * 0.6;
+      if (winDiff > 0) {
+        homeExpected -= dominantReduction;
+      } else {
+        awayExpected -= dominantReduction;
+      }
     }
 
     if (drawProb > 0.28) {
@@ -810,12 +939,29 @@ export class EloService {
       awayExpected = awayExpected * 0.6 + avg * 0.4;
     }
 
-    homeExpected += weatherEffect * 2;
-    awayExpected -= weatherEffect * 2;
+    if (weatherEffect < 0) {
+      const totalReduction = Math.abs(weatherEffect) * 2;
+      const ratingAdvantage = homeRating - awayRating;
+      const homeShare =
+        totalReduction * Math.max(0.3, 0.5 - ratingAdvantage / 2000);
+      const awayShare =
+        totalReduction * Math.min(0.7, 0.5 + ratingAdvantage / 2000);
+      homeExpected -= homeShare;
+      awayExpected -= awayShare;
+    } else {
+      homeExpected += weatherEffect * 2;
+      awayExpected -= weatherEffect * 2;
+    }
 
     if (refereeEffect < 0) {
-      homeExpected -= 0.1;
-      awayExpected -= 0.1;
+      const absRefereeEffect = Math.abs(refereeEffect);
+      const ratingAdvantage = homeRating - awayRating;
+      const baseReduction = absRefereeEffect;
+      homeExpected -= baseReduction;
+      awayExpected -= baseReduction;
+      const redCardAsymmetry = absRefereeEffect * 2 * (ratingAdvantage / 1000);
+      homeExpected += redCardAsymmetry * 0.2;
+      awayExpected -= redCardAsymmetry * 0.8;
     }
 
     return {

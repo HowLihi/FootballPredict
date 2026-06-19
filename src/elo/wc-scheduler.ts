@@ -5,9 +5,10 @@ import {
   OnModuleDestroy,
 } from '@nestjs/common';
 import { FootballDataApiDataSource } from '../collector/api/football-data.source';
+import { MatchData } from '../collector/interfaces/match.interface';
 import { WcPredictionService } from './wc-prediction.service';
 import { EloService } from './elo.service';
-import { beijingDateString, beijingDateAddDays } from './beijing-time';
+import { beijingDateAddDays } from './beijing-time';
 
 const INTERVAL_LIVE_MS = 5 * 60 * 1000;
 const INTERVAL_IDLE_MS = 30 * 60 * 1000;
@@ -18,7 +19,8 @@ const TEAM_NAME_MAP: Record<string, string> = {
   'United States': 'USA',
   'Korea Republic': 'South Korea',
   'Korea DPR': 'North Korea',
-  'Bosnia-Herzegovina': 'Bosnia and Herzegovina',
+  'Bosnia-Herzegovina': 'Bosnia & Herzegovina',
+  Czechia: 'Czech Republic',
   'Congo DR': 'DR Congo',
   'Cape Verde Islands': 'Cape Verde',
 };
@@ -34,6 +36,108 @@ export class WcScheduler implements OnModuleInit, OnModuleDestroy {
     private readonly wcPredictionService: WcPredictionService,
     private readonly eloService: EloService,
   ) {}
+
+  private async fetchMatchesInRange(
+    dateFrom: string,
+    dateTo: string,
+  ): Promise<MatchData[]> {
+    const allMatches: MatchData[] = [];
+    let start = new Date(dateFrom);
+    const end = new Date(dateTo);
+
+    while (start <= end) {
+      let chunkEnd = new Date(start);
+      chunkEnd.setDate(chunkEnd.getDate() + 9);
+      if (chunkEnd > end) chunkEnd = end;
+
+      const from = start.toISOString().slice(0, 10);
+      const to = chunkEnd.toISOString().slice(0, 10);
+
+      const matches = await this.footballDataApi.fetchMatchesByDate(from, to);
+      allMatches.push(...matches);
+
+      start = new Date(chunkEnd);
+      start.setDate(start.getDate() + 1);
+    }
+
+    return allMatches;
+  }
+
+  async refreshNow(): Promise<{ updated: number }> {
+    if (this.running) {
+      return { updated: 0 };
+    }
+
+    this.running = true;
+    let updated = 0;
+
+    try {
+      const twoDaysLater = beijingDateAddDays(2);
+      const tenDaysAgo = beijingDateAddDays(-10);
+
+      this.logger.log(`手动刷新世界杯比分: ${tenDaysAgo} ~ ${twoDaysLater}`);
+
+      const matches = await this.fetchMatchesInRange(tenDaysAgo, twoDaysLater);
+
+      const wcMatches = matches.filter(
+        (m) =>
+          m.league === 'World Cup' ||
+          m.league === 'FIFA World Cup' ||
+          m.league === 'World Cup Qualification',
+      );
+
+      const finishedMatches = wcMatches.filter((m) => m.status === 'FINISHED');
+
+      if (finishedMatches.length > 0) {
+        for (const match of finishedMatches) {
+          if (match.homeScore === null || match.awayScore === null) continue;
+
+          const homeTeam = this.normalizeTeamName(match.homeTeam);
+          const awayTeam = this.normalizeTeamName(match.awayTeam);
+
+          try {
+            const result = await this.wcPredictionService.updateMatchResult(
+              homeTeam,
+              awayTeam,
+              match.homeScore,
+              match.awayScore,
+            );
+
+            if (result) {
+              updated++;
+              await this.eloService.updateEloForMatch(
+                homeTeam,
+                awayTeam,
+                match.homeScore,
+                match.awayScore,
+                true,
+                'FIFA World Cup',
+              );
+            }
+          } catch (err: any) {
+            this.logger.warn(
+              `更新比分失败 ${homeTeam} vs ${awayTeam}: ${err.message}`,
+            );
+          }
+        }
+      }
+
+      if (updated > 0) {
+        this.logger.log(`手动刷新更新了 ${updated} 场比赛比分`);
+        try {
+          await this.wcPredictionService.regenerateUpcomingPredictions();
+        } catch (err: any) {
+          this.logger.error(`重新生成预测失败: ${err.message}`, err.stack);
+        }
+      }
+    } catch (err: any) {
+      this.logger.error(`手动刷新失败: ${err.message}`, err.stack);
+    } finally {
+      this.running = false;
+    }
+
+    return { updated };
+  }
 
   onModuleInit() {
     this.logger.log('世界杯数据调度器启动，首次执行将在 30 秒后...');
@@ -84,15 +188,12 @@ export class WcScheduler implements OnModuleInit, OnModuleDestroy {
   }
 
   private async refreshWcData(): Promise<boolean> {
-    const today = beijingDateString();
+    const tenDaysAgo = beijingDateAddDays(-10);
     const twoDaysLater = beijingDateAddDays(2);
 
-    this.logger.log(`开始刷新世界杯数据: ${today} ~ ${twoDaysLater}`);
+    this.logger.log(`开始刷新世界杯数据: ${tenDaysAgo} ~ ${twoDaysLater}`);
 
-    const matches = await this.footballDataApi.fetchMatchesByDate(
-      today,
-      twoDaysLater,
-    );
+    const matches = await this.fetchMatchesInRange(tenDaysAgo, twoDaysLater);
 
     const wcMatches = matches.filter(
       (m) =>

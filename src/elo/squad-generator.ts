@@ -6,6 +6,7 @@ export interface Player {
   strengths: string[];
   weaknesses: string[];
   isStar: boolean;
+  starLevel: 'super' | 'star' | 'normal';
   photoUrl: string;
   age?: number;
   nationality?: string;
@@ -208,6 +209,7 @@ export function generateSquad(teamName: string): Squad {
     }
 
     const isStar = i < 3;
+    const starLevel: 'super' | 'star' | 'normal' = isStar ? 'star' : 'normal';
     const age = 22 + Math.floor(seededRandom(seed + 6) * 14);
     const ageFactor =
       age >= 24 && age <= 29 ? 1.0 : age >= 30 ? 0.7 : age >= 22 ? 0.85 : 0.6;
@@ -233,6 +235,7 @@ export function generateSquad(teamName: string): Squad {
       strengths,
       weaknesses,
       isStar,
+      starLevel,
       photoUrl,
       age,
       marketValue,

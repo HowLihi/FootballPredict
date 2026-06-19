@@ -107,6 +107,18 @@
   margin-bottom: 16px;
 }
 
+.squad-stats-row.squad-stats-5 {
+  grid-template-columns: repeat(5, 1fr);
+}
+
+.squad-stat.super-stat .squad-stat-value {
+  color: #f87171;
+}
+
+.squad-stat.star-stat .squad-stat-value {
+  color: #fbbf24;
+}
+
 .squad-stat {
   background: #252840;
   border-radius: 10px;
@@ -321,55 +333,99 @@
   margin: 0;
   padding-bottom: 8px;
   border-bottom: 1px solid #2a2d3e;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.squad-section-title.super-section-title {
+  border-bottom-color: rgba(239, 68, 68, 0.3);
+}
+
+.squad-section-title.star-section-title {
+  border-bottom-color: rgba(251, 191, 36, 0.3);
+}
+
+.section-subtitle {
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 400;
+}
+
+.super-section-title .section-subtitle {
+  color: #f87171;
+}
+
+.star-section-title .section-subtitle {
+  color: #fbbf24;
+}
+
+.player-market-value.super-mv {
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.player-star-badge.super-badge {
+  font-size: 14px;
 }
 
 .players-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
 }
 
 .player-card {
   background: #1a1d2e;
   border-radius: 12px;
-  padding: 12px;
+  padding: 0;
   border: 1px solid #2a2d3e;
   position: relative;
   transition: border-color 0.2s;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .player-card:hover {
   border-color: #6366f1;
 }
 
-.player-card.star-card {
-  border-color: #fbbf24;
-  background: linear-gradient(135deg, #1a1d2e, #1f2136);
-}
-
 .player-star-badge {
   position: absolute;
   top: 8px;
   right: 8px;
-  font-size: 16px;
+  font-size: 18px;
+  z-index: 1;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.6));
 }
 
 .player-photo {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  margin-bottom: 8px;
-  border: 2px solid #6366f1;
-}
-
-.star-card .player-photo {
-  border-color: #fbbf24;
+  width: 100%;
+  height: 140px;
+  object-fit: cover;
+  object-position: top center;
+  background: #252840;
+  display: block;
 }
 
 .player-info {
   display: flex;
   flex-direction: column;
   gap: 3px;
+  padding: 10px 12px 12px;
+}
+
+.player-card.star-card {
+  border-color: #fbbf24;
+  border-top: 3px solid #fbbf24;
+}
+
+.player-card.super-star-card {
+  border-color: #ef4444;
+  border-top: 3px solid #ef4444;
+  background: linear-gradient(180deg, #2a1a1e 0%, #1a1d2e 40%);
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.15);
 }
 
 .player-number {
@@ -378,9 +434,12 @@
 }
 
 .player-name {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   color: #d1d5db;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .player-position {
@@ -401,6 +460,10 @@
 
 .star-card .player-overall {
   color: #fbbf24;
+}
+
+.super-star-card .player-overall {
+  color: #f87171;
 }
 
 .player-strengths,
@@ -434,6 +497,9 @@
   }
   .squad-stats-row {
     grid-template-columns: repeat(2, 1fr);
+  }
+  .squad-stats-row.squad-stats-5 {
+    grid-template-columns: repeat(3, 1fr);
   }
   .theory-legend {
     grid-template-columns: 1fr;

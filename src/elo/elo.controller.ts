@@ -5,6 +5,7 @@ import {
   TeamEloSnapshot,
   MatchPrediction,
 } from './elo.service';
+import { EnsembleService } from './ensemble.service';
 import { EloRating } from './elo-rating.entity';
 import { EloHistory } from './elo-history.entity';
 
@@ -12,7 +13,10 @@ import { EloHistory } from './elo-history.entity';
 export class EloController {
   private readonly logger = new Logger(EloController.name);
 
-  constructor(private readonly eloService: EloService) {}
+  constructor(
+    private readonly eloService: EloService,
+    private readonly ensembleService: EnsembleService,
+  ) {}
 
   @Post('calculate')
   async calculateElo(
@@ -76,7 +80,13 @@ export class EloController {
     if (!home || !away) {
       return { error: '请提供主队(home)和客队(away)参数' };
     }
-    return this.eloService.predictMatch(home, away, neutral === 'true');
+    const resolvedHome = this.ensembleService.resolveTeamName(home);
+    const resolvedAway = this.ensembleService.resolveTeamName(away);
+    return this.eloService.predictMatch(
+      resolvedHome,
+      resolvedAway,
+      neutral === 'true',
+    );
   }
 
   @Post('predict-advanced')
@@ -102,6 +112,10 @@ export class EloController {
       awayFatigue: number;
       homePressure: number;
       awayPressure: number;
+      homeInjuryImpact: number;
+      awayInjuryImpact: number;
+      homeStakes: number;
+      awayStakes: number;
       fairnessWeight: number;
       fifaWeight: number;
       bookmakerWeight: number;
@@ -117,6 +131,8 @@ export class EloController {
         tacticsEffect: number;
         fatigueEffect: number;
         pressureEffect: number;
+        injuryEffect: number;
+        stakesEffect: number;
         fairnessEffect: number;
         fifaEffect: number;
         bookmakerEffect: number;
@@ -127,7 +143,33 @@ export class EloController {
     if (!body.homeTeam || !body.awayTeam) {
       return { error: '请提供主队和客队名称' };
     }
-    return this.eloService.predictAdvanced(body);
+
+    const resolvedHome = this.ensembleService.resolveTeamName(body.homeTeam);
+    const resolvedAway = this.ensembleService.resolveTeamName(body.awayTeam);
+    const resolvedBody = {
+      ...body,
+      homeTeam: resolvedHome,
+      awayTeam: resolvedAway,
+    };
+
+    const ensemble = await this.ensembleService.predict(
+      resolvedBody.homeTeam,
+      resolvedBody.awayTeam,
+      body.neutral,
+    );
+
+    if (ensemble) {
+      return this.eloService.predictAdvanced(
+        resolvedBody,
+        ensemble.finalHomeWin,
+        ensemble.finalDraw,
+        ensemble.finalAwayWin,
+        ensemble.individualModels.poisson.homeGoalsExpected,
+        ensemble.individualModels.poisson.awayGoalsExpected,
+      );
+    }
+
+    return this.eloService.predictAdvanced(resolvedBody);
   }
 
   @Post('recalculate')

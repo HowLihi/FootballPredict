@@ -5,28 +5,29 @@ import {
   type AdvancedPrediction,
   type WcWeather,
   type WcReferee,
+  type MatchParamsData,
+  type MatchSummaryData,
+  type MatchSummaryItem,
 } from '../api';
 import './PredictAdvanced.css';
 import { tTeam, tVenue } from '../utils/i18n';
 import { parseBeijingDate, parseBeijingParts } from '../utils/beijing-time';
-
-const REFEREE_OPTIONS = [
-  { value: 'lenient', label: '宽松 — 更少出牌，比赛流畅' },
-  { value: 'average', label: '适中 — 标准判罚尺度' },
-  { value: 'strict', label: '严格 — 更多出牌，比赛中断多' },
-  { value: 'very_strict', label: '极严 — 频繁出牌，比赛碎片化' },
-];
 
 export default function PredictAdvanced() {
   const [matches, setMatches] = useState<WcPrediction[]>([]);
   const [selectedMatch, setSelectedMatch] = useState<WcPrediction | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const getMatchStatus = (m: WcPrediction): 'live' | 'upcoming' => {
+  const getMatchStatus = (
+    m: WcPrediction,
+  ): 'live' | 'upcoming' | 'finished' => {
+    if (m.actualHomeScore !== null && m.actualAwayScore !== null)
+      return 'finished';
     const now = new Date();
     const start = parseBeijingDate(m.matchDate);
     const end = new Date(start.getTime() + 2 * 60 * 60 * 1000);
-    if (now >= start && now <= end) return 'live';
+    if (now > end) return 'finished';
+    if (now >= start) return 'live';
     return 'upcoming';
   };
 
@@ -40,14 +41,14 @@ export default function PredictAdvanced() {
 
   const [referee, setReferee] = useState<WcReferee | null>(null);
   const [refereeLoading, setRefereeLoading] = useState(false);
-  const [allReferees, setAllReferees] = useState<WcReferee[]>([]);
+  const [_allReferees, setAllReferees] = useState<WcReferee[]>([]);
   const [manualReferee, setManualReferee] = useState(false);
 
   const [kFactor, setKFactor] = useState(32);
   const [homeAdvantage, setHomeAdvantage] = useState(100);
-  const [weatherWeight, setWeatherWeight] = useState(1.0);
+  const [weatherWeight, setWeatherWeight] = useState(0);
   const [refereeStrictness, setRefereeStrictness] = useState('average');
-  const [refereeWeight, setRefereeWeight] = useState(1.0);
+  const [refereeWeight, setRefereeWeight] = useState(0);
   const [neutral, setNeutral] = useState(false);
 
   const [homeForm, setHomeForm] = useState(5);
@@ -60,27 +61,64 @@ export default function PredictAdvanced() {
   const [awayFatigue, setAwayFatigue] = useState(3);
   const [homePressure, setHomePressure] = useState(5);
   const [awayPressure, setAwayPressure] = useState(5);
+  const [homeInjuryImpact, setHomeInjuryImpact] = useState(1);
+  const [awayInjuryImpact, setAwayInjuryImpact] = useState(1);
+  const [homeStakes, setHomeStakes] = useState(5);
+  const [awayStakes, setAwayStakes] = useState(5);
 
   const [prediction, setPrediction] = useState<AdvancedPrediction | null>(null);
   const [predicting, setPredicting] = useState(false);
   const [error, setError] = useState('');
 
-  const [fairnessWeight, setFairnessWeight] = useState(1.0);
-  const [fifaWeight, setFifaWeight] = useState(1.0);
-  const [bookmakerWeight, setBookmakerWeight] = useState(1.0);
+  const [fairnessWeight, setFairnessWeight] = useState(0);
+  const [fifaWeight, setFifaWeight] = useState(0);
+  const [bookmakerWeight, setBookmakerWeight] = useState(0);
+
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState('');
+
+  const [matchSummary, setMatchSummary] = useState<MatchSummaryData | null>(
+    null,
+  );
+  const [summaryEditing, setSummaryEditing] = useState(false);
+  const [summaryDraft, setSummaryDraft] = useState<MatchSummaryData | null>(
+    null,
+  );
+  const [gatheringIntelligence, setGatheringIntelligence] = useState(false);
+  const [quantifying, setQuantifying] = useState(false);
+  const [quantifyReasoning, setQuantifyReasoning] = useState('');
 
   useEffect(() => {
-    api.wc
-      .getRecentMatches()
-      .then((data) => {
+    const loadMatches = async () => {
+      try {
+        const data = await api.wc.getPredictions();
+        setMatches(data);
+
         const now = new Date();
-        const upcoming = data.filter(
-          (m) => parseBeijingDate(m.matchDate) > now,
+        const hasFinishedWithoutScore = data.some(
+          (m) =>
+            m.actualHomeScore === null &&
+            m.actualAwayScore === null &&
+            parseBeijingDate(m.matchDate).getTime() + 2 * 60 * 60 * 1000 <
+              now.getTime(),
         );
-        setMatches(upcoming);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+
+        if (hasFinishedWithoutScore) {
+          try {
+            const res = await api.wc.refreshScores();
+            if (res.updated > 0) {
+              const refreshed = await api.wc.getPredictions();
+              setMatches(refreshed);
+            }
+          } catch {}
+        }
+      } catch {
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadMatches();
     api.wc
       .getAllReferees()
       .then(setAllReferees)
@@ -92,20 +130,76 @@ export default function PredictAdvanced() {
     setNeutral(m.neutral);
     setPrediction(null);
     setError('');
+    setSaveMsg('');
     setWeather(null);
     setWeatherLoading(true);
     setReferee(null);
     setRefereeLoading(true);
     setManualReferee(false);
+    setMatchSummary(null);
+    setSummaryEditing(false);
+    setSummaryDraft(null);
     try {
-      const [data, ref] = await Promise.all([
+      const [data, ref, savedParams] = await Promise.all([
         api.wc.getWeather(m.id),
         api.wc.getReferee(m.id),
+        api.wc.getMatchParams(m.id).catch(() => null),
       ]);
       setWeather(data);
       if (ref) {
         setReferee(ref);
         setRefereeStrictness(ref.style);
+      }
+      if (savedParams) {
+        setKFactor(savedParams.kFactor);
+        setHomeAdvantage(savedParams.homeAdvantage);
+        setNeutral(savedParams.neutral);
+        setWeatherWeight(savedParams.weatherWeight);
+        setRefereeWeight(savedParams.refereeWeight);
+        setRefereeStrictness(savedParams.refereeStrictness);
+        setHomeForm(savedParams.homeForm);
+        setAwayForm(savedParams.awayForm);
+        setHomeStarPower(savedParams.homeStarPower);
+        setAwayStarPower(savedParams.awayStarPower);
+        setHomeTactics(savedParams.homeTactics);
+        setAwayTactics(savedParams.awayTactics);
+        setHomeFatigue(savedParams.homeFatigue);
+        setAwayFatigue(savedParams.awayFatigue);
+        setHomePressure(savedParams.homePressure);
+        setAwayPressure(savedParams.awayPressure);
+        setHomeInjuryImpact(savedParams.homeInjuryImpact);
+        setAwayInjuryImpact(savedParams.awayInjuryImpact);
+        setHomeStakes(savedParams.homeStakes);
+        setAwayStakes(savedParams.awayStakes);
+        setFairnessWeight(savedParams.fairnessWeight);
+        setFifaWeight(savedParams.fifaWeight);
+        setBookmakerWeight(savedParams.bookmakerWeight);
+        if (savedParams.matchSummary) {
+          setMatchSummary(savedParams.matchSummary);
+        }
+      } else {
+        setKFactor(32);
+        setHomeAdvantage(100);
+        setWeatherWeight(0);
+        setRefereeWeight(0);
+        setRefereeStrictness('average');
+        setHomeForm(5);
+        setAwayForm(5);
+        setHomeStarPower(5);
+        setAwayStarPower(5);
+        setHomeTactics('balanced');
+        setAwayTactics('balanced');
+        setHomeFatigue(3);
+        setAwayFatigue(3);
+        setHomePressure(5);
+        setAwayPressure(5);
+        setHomeInjuryImpact(1);
+        setAwayInjuryImpact(1);
+        setHomeStakes(5);
+        setAwayStakes(5);
+        setFairnessWeight(0);
+        setFifaWeight(0);
+        setBookmakerWeight(0);
       }
     } catch {
       setWeather(null);
@@ -113,6 +207,47 @@ export default function PredictAdvanced() {
     } finally {
       setWeatherLoading(false);
       setRefereeLoading(false);
+    }
+  };
+
+  const handleSaveParams = async () => {
+    if (!selectedMatch) return;
+    setSaving(true);
+    setSaveMsg('');
+    try {
+      await api.wc.saveMatchParams(selectedMatch.id, {
+        kFactor,
+        homeAdvantage,
+        neutral,
+        weatherWeight,
+        weatherCondition: weather?.during.condition || 'sunny',
+        refereeWeight,
+        refereeStrictness,
+        homeForm,
+        awayForm,
+        homeStarPower,
+        awayStarPower,
+        homeTactics,
+        awayTactics,
+        homeFatigue,
+        awayFatigue,
+        homePressure,
+        awayPressure,
+        homeInjuryImpact,
+        awayInjuryImpact,
+        homeStakes,
+        awayStakes,
+        fairnessWeight,
+        fifaWeight,
+        bookmakerWeight,
+        matchSummary: matchSummary,
+      });
+      setSaveMsg('✅ 已保存');
+    } catch {
+      setSaveMsg('❌ 保存失败');
+    } finally {
+      setSaving(false);
+      setTimeout(() => setSaveMsg(''), 2000);
     }
   };
 
@@ -145,6 +280,10 @@ export default function PredictAdvanced() {
         awayFatigue,
         homePressure,
         awayPressure,
+        homeInjuryImpact,
+        awayInjuryImpact,
+        homeStakes,
+        awayStakes,
         fairnessWeight,
         fifaWeight,
         bookmakerWeight,
@@ -154,7 +293,7 @@ export default function PredictAdvanced() {
       } else if (res) {
         setPrediction(res as AdvancedPrediction);
       } else {
-        setError('未找到球队 ELO 数据');
+        setError('未找到球队数据');
       }
     } catch (err: any) {
       setError(err.message);
@@ -171,20 +310,218 @@ export default function PredictAdvanced() {
       )
     : 0;
 
+  const [matchTab, setMatchTab] = useState<'upcoming' | 'finished'>('upcoming');
+
+  const emptySummary: MatchSummaryData = {
+    highlights: [],
+    keyEvents: [''],
+    refereeNote: '',
+    venueNote: '',
+    generalNote: '',
+  };
+
+  const getImpactLabel = (impact: MatchSummaryItem['impact']) => {
+    switch (impact) {
+      case 'home_positive':
+        return '利好主队';
+      case 'home_negative':
+        return '不利主队';
+      case 'away_positive':
+        return '利好客队';
+      case 'away_negative':
+        return '不利客队';
+      case 'neutral':
+        return '中立';
+    }
+  };
+
+  const startEditSummary = () => {
+    setSummaryDraft(
+      matchSummary || {
+        ...emptySummary,
+        highlights: [
+          {
+            category: '',
+            icon: '📋',
+            title: '',
+            detail: '',
+            impact: 'neutral' as const,
+          },
+        ],
+      },
+    );
+    setSummaryEditing(true);
+  };
+
+  const addHighlight = () => {
+    if (!summaryDraft) return;
+    setSummaryDraft({
+      ...summaryDraft,
+      highlights: [
+        ...summaryDraft.highlights,
+        {
+          category: '',
+          icon: '📋',
+          title: '',
+          detail: '',
+          impact: 'neutral' as const,
+        },
+      ],
+    });
+  };
+
+  const removeHighlight = (idx: number) => {
+    if (!summaryDraft) return;
+    setSummaryDraft({
+      ...summaryDraft,
+      highlights: summaryDraft.highlights.filter((_, i) => i !== idx),
+    });
+  };
+
+  const updateHighlight = (
+    idx: number,
+    field: keyof MatchSummaryItem,
+    value: string,
+  ) => {
+    if (!summaryDraft) return;
+    const updated = [...summaryDraft.highlights];
+    updated[idx] = { ...updated[idx], [field]: value };
+    setSummaryDraft({ ...summaryDraft, highlights: updated });
+  };
+
+  const addKeyEvent = () => {
+    if (!summaryDraft) return;
+    setSummaryDraft({
+      ...summaryDraft,
+      keyEvents: [...summaryDraft.keyEvents, ''],
+    });
+  };
+
+  const removeKeyEvent = (idx: number) => {
+    if (!summaryDraft) return;
+    setSummaryDraft({
+      ...summaryDraft,
+      keyEvents: summaryDraft.keyEvents.filter((_, i) => i !== idx),
+    });
+  };
+
+  const updateKeyEvent = (idx: number, value: string) => {
+    if (!summaryDraft) return;
+    const updated = [...summaryDraft.keyEvents];
+    updated[idx] = value;
+    setSummaryDraft({ ...summaryDraft, keyEvents: updated });
+  };
+
+  const saveSummary = () => {
+    if (!summaryDraft) return;
+    setMatchSummary(summaryDraft);
+    setSummaryEditing(false);
+    setSummaryDraft(null);
+  };
+
+  const cancelEditSummary = () => {
+    setSummaryEditing(false);
+    setSummaryDraft(null);
+  };
+
+  const handleGatherIntelligence = async () => {
+    if (!selectedMatch) return;
+    setGatheringIntelligence(true);
+    try {
+      const res = await api.wc.gatherIntelligence(selectedMatch.id);
+      if (res?.summary) {
+        setMatchSummary(res.summary);
+      }
+    } catch {
+    } finally {
+      setGatheringIntelligence(false);
+    }
+  };
+
+  const handleQuantifyIntelligence = async () => {
+    if (!selectedMatch || !matchSummary) return;
+    setQuantifying(true);
+    setQuantifyReasoning('');
+    try {
+      const res = await api.wc.quantifyIntelligence(
+        selectedMatch.id,
+        matchSummary,
+      );
+      if (res?.params) {
+        const p = res.params;
+        setHomeForm(p.homeForm);
+        setAwayForm(p.awayForm);
+        setHomeStarPower(p.homeStarPower);
+        setAwayStarPower(p.awayStarPower);
+        setHomeTactics(p.homeTactics);
+        setAwayTactics(p.awayTactics);
+        setHomeFatigue(p.homeFatigue);
+        setAwayFatigue(p.awayFatigue);
+        setHomePressure(p.homePressure);
+        setAwayPressure(p.awayPressure);
+        setHomeInjuryImpact(p.homeInjuryImpact);
+        setAwayInjuryImpact(p.awayInjuryImpact);
+        setHomeStakes(p.homeStakes);
+        setAwayStakes(p.awayStakes);
+        setRefereeStrictness(p.refereeStrictness);
+        setQuantifyReasoning(res.reasoning || '');
+      }
+    } catch {
+      setQuantifyReasoning('量化失败，请重试');
+    } finally {
+      setQuantifying(false);
+    }
+  };
+
+  const upcomingMatches = matches.filter(
+    (m) => getMatchStatus(m) !== 'finished',
+  );
+  const finishedMatches = matches.filter(
+    (m) => getMatchStatus(m) === 'finished',
+  );
+  const displayedMatches =
+    matchTab === 'upcoming' ? upcomingMatches : finishedMatches;
+
   return (
     <div className="predict-adv-page">
       <h1>🎛️ 调参预测</h1>
-      <p className="page-desc">选择一场比赛，调整参数权重，预测比赛结果</p>
+      <p className="page-desc">
+        基于集成预测结果，调整参数权重，精细预测比赛结果
+      </p>
 
       <div className="predict-layout">
         <div className="match-select-panel">
           <h3>选择比赛</h3>
+          <div className="match-tabs">
+            <button
+              className={`match-tab ${matchTab === 'upcoming' ? 'active' : ''}`}
+              onClick={() => setMatchTab('upcoming')}
+            >
+              未开始
+              {upcomingMatches.length > 0 && (
+                <span className="tab-count">{upcomingMatches.length}</span>
+              )}
+            </button>
+            <button
+              className={`match-tab ${matchTab === 'finished' ? 'active' : ''}`}
+              onClick={() => setMatchTab('finished')}
+            >
+              已结束
+              {finishedMatches.length > 0 && (
+                <span className="tab-count">{finishedMatches.length}</span>
+              )}
+            </button>
+          </div>
           {loading && <div className="loading">加载中...</div>}
-          {!loading && matches.length === 0 && (
-            <div className="no-data-small">暂无即将开始或进行中的比赛</div>
+          {!loading && displayedMatches.length === 0 && (
+            <div className="no-data-small">
+              {matchTab === 'upcoming'
+                ? '暂无未开始的比赛'
+                : '暂无已结束的比赛'}
+            </div>
           )}
           <div className="match-list">
-            {matches.map((m) => {
+            {displayedMatches.map((m) => {
               const status = getMatchStatus(m);
               return (
                 <div
@@ -200,7 +537,11 @@ export default function PredictAdvanced() {
                   </div>
                   <div className="mli-teams">
                     <span>{tTeam(m.homeTeam)}</span>
-                    <span className="mli-vs">vs</span>
+                    <span className="mli-vs">
+                      {status === 'finished'
+                        ? `${m.actualHomeScore} : ${m.actualAwayScore}`
+                        : 'vs'}
+                    </span>
                     <span>{tTeam(m.awayTeam)}</span>
                     {status === 'live' && (
                       <span className="mli-live-badge">● 进行中</span>
@@ -216,6 +557,266 @@ export default function PredictAdvanced() {
         </div>
 
         <div className="params-panel">
+          <div className="match-summary-section">
+            <div className="summary-header">
+              <h3>📋 赛情概要</h3>
+              {selectedMatch && !summaryEditing && (
+                <div className="summary-header-actions">
+                  <button
+                    className="btn-gather-intel"
+                    onClick={handleGatherIntelligence}
+                    disabled={gatheringIntelligence}
+                  >
+                    {gatheringIntelligence ? '⏳ 搜集中...' : '🔍 搜集情报'}
+                  </button>
+                  {matchSummary && (
+                    <button
+                      className="btn-quantify-intel"
+                      onClick={handleQuantifyIntelligence}
+                      disabled={quantifying}
+                    >
+                      {quantifying ? '⏳ 量化中...' : '📊 量化参数'}
+                    </button>
+                  )}
+                  <button
+                    className="btn-summary-edit"
+                    onClick={startEditSummary}
+                  >
+                    {matchSummary ? '✏️ 编辑' : '➕ 添加'}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {!selectedMatch && (
+              <div className="summary-placeholder">请先在左侧选择一场比赛</div>
+            )}
+
+            {selectedMatch && !summaryEditing && !matchSummary && (
+              <div className="summary-empty">
+                <div className="summary-empty-icon">📝</div>
+                <div className="summary-empty-text">
+                  暂无赛情概要，点击上方"添加"按钮录入关键比赛信息
+                </div>
+              </div>
+            )}
+
+            {selectedMatch && !summaryEditing && matchSummary && (
+              <div className="summary-display">
+                {matchSummary.highlights.length > 0 && (
+                  <div className="summary-highlights">
+                    {matchSummary.highlights.map((h, i) => (
+                      <div
+                        key={i}
+                        className={`summary-highlight-item impact-${h.impact}`}
+                      >
+                        <span className="sh-icon">{h.icon}</span>
+                        <div className="sh-content">
+                          <div className="sh-title-row">
+                            <span className="sh-category">{h.category}</span>
+                            <span className="sh-title">{h.title}</span>
+                          </div>
+                          <div className="sh-detail">{h.detail}</div>
+                        </div>
+                        <span className={`sh-impact-badge badge-${h.impact}`}>
+                          {getImpactLabel(h.impact)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {matchSummary.keyEvents.filter((e) => e).length > 0 && (
+                  <div className="summary-key-events">
+                    <div className="ske-label">🔑 关键事件</div>
+                    <ul className="ske-list">
+                      {matchSummary.keyEvents
+                        .filter((e) => e)
+                        .map((e, i) => (
+                          <li key={i}>{e}</li>
+                        ))}
+                    </ul>
+                  </div>
+                )}
+                {(matchSummary.refereeNote ||
+                  matchSummary.venueNote ||
+                  matchSummary.generalNote) && (
+                  <div className="summary-notes">
+                    {matchSummary.refereeNote && (
+                      <div className="summary-note-item">
+                        <span className="sn-icon">👨‍⚖️</span>
+                        <span className="sn-text">
+                          {matchSummary.refereeNote}
+                        </span>
+                      </div>
+                    )}
+                    {matchSummary.venueNote && (
+                      <div className="summary-note-item">
+                        <span className="sn-icon">🏟️</span>
+                        <span className="sn-text">
+                          {matchSummary.venueNote}
+                        </span>
+                      </div>
+                    )}
+                    {matchSummary.generalNote && (
+                      <div className="summary-note-item">
+                        <span className="sn-icon">💬</span>
+                        <span className="sn-text">
+                          {matchSummary.generalNote}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {quantifyReasoning && (
+                  <div className="quantify-reasoning">
+                    <span className="sn-icon">🤖</span>
+                    <span className="sn-text">{quantifyReasoning}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {selectedMatch && summaryEditing && summaryDraft && (
+              <div className="summary-edit-form">
+                <div className="sef-section-label">关键因素</div>
+                {summaryDraft.highlights.map((h, i) => (
+                  <div key={i} className="sef-highlight-row">
+                    <div className="sef-hr-top">
+                      <input
+                        className="sef-input sef-icon-input"
+                        value={h.icon}
+                        onChange={(e) =>
+                          updateHighlight(i, 'icon', e.target.value)
+                        }
+                        placeholder="图标"
+                      />
+                      <input
+                        className="sef-input sef-category-input"
+                        value={h.category}
+                        onChange={(e) =>
+                          updateHighlight(i, 'category', e.target.value)
+                        }
+                        placeholder="类别(如:主场/裁判/伤病)"
+                      />
+                      <select
+                        className="sef-select"
+                        value={h.impact}
+                        onChange={(e) =>
+                          updateHighlight(i, 'impact', e.target.value)
+                        }
+                      >
+                        <option value="home_positive">利好主队</option>
+                        <option value="home_negative">不利主队</option>
+                        <option value="away_positive">利好客队</option>
+                        <option value="away_negative">不利客队</option>
+                        <option value="neutral">中立</option>
+                      </select>
+                      <button
+                        className="sef-remove-btn"
+                        onClick={() => removeHighlight(i)}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    <input
+                      className="sef-input sef-title-input"
+                      value={h.title}
+                      onChange={(e) =>
+                        updateHighlight(i, 'title', e.target.value)
+                      }
+                      placeholder="标题(如:东道主优势)"
+                    />
+                    <input
+                      className="sef-input sef-detail-input"
+                      value={h.detail}
+                      onChange={(e) =>
+                        updateHighlight(i, 'detail', e.target.value)
+                      }
+                      placeholder="详细说明(如:世界杯东道主首秀从未输球)"
+                    />
+                  </div>
+                ))}
+                <button className="sef-add-btn" onClick={addHighlight}>
+                  + 添加关键因素
+                </button>
+
+                <div className="sef-section-label">关键事件</div>
+                {summaryDraft.keyEvents.map((e, i) => (
+                  <div key={i} className="sef-event-row">
+                    <input
+                      className="sef-input sef-event-input"
+                      value={e}
+                      onChange={(ev) => updateKeyEvent(i, ev.target.value)}
+                      placeholder="关键事件描述(如:第35分钟 西索尔红牌罚下)"
+                    />
+                    <button
+                      className="sef-remove-btn"
+                      onClick={() => removeKeyEvent(i)}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+                <button className="sef-add-btn" onClick={addKeyEvent}>
+                  + 添加关键事件
+                </button>
+
+                <div className="sef-section-label">备注</div>
+                <input
+                  className="sef-input"
+                  value={summaryDraft.refereeNote}
+                  onChange={(e) =>
+                    setSummaryDraft({
+                      ...summaryDraft,
+                      refereeNote: e.target.value,
+                    })
+                  }
+                  placeholder="裁判备注(如:主裁判极严，全场3张红牌)"
+                />
+                <input
+                  className="sef-input"
+                  value={summaryDraft.venueNote}
+                  onChange={(e) =>
+                    setSummaryDraft({
+                      ...summaryDraft,
+                      venueNote: e.target.value,
+                    })
+                  }
+                  placeholder="场地备注(如:阿兹特克体育场，海拔2240米)"
+                />
+                <input
+                  className="sef-input"
+                  value={summaryDraft.generalNote}
+                  onChange={(e) =>
+                    setSummaryDraft({
+                      ...summaryDraft,
+                      generalNote: e.target.value,
+                    })
+                  }
+                  placeholder="综合备注(如:揭幕战传统，东道主首秀不败)"
+                />
+
+                <div className="sef-actions">
+                  <button
+                    className="btn btn-primary sef-save-btn"
+                    onClick={saveSummary}
+                  >
+                    ✅ 确认
+                  </button>
+                  <button
+                    className="btn btn-secondary sef-cancel-btn"
+                    onClick={cancelEditSummary}
+                  >
+                    取消
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="param-divider" />
+
           <h3>参数调节</h3>
 
           <div className="param-group">
@@ -231,7 +832,7 @@ export default function PredictAdvanced() {
               onChange={(e) => setKFactor(Number(e.target.value))}
             />
             <div className="param-hint">
-              影响 ELO 积分变化幅度，越大波动越剧烈
+              影响 ELO 积分变化幅度，越大波动越剧烈（仅影响基础ELO计算）
             </div>
           </div>
 
@@ -247,7 +848,7 @@ export default function PredictAdvanced() {
               value={homeAdvantage}
               onChange={(e) => setHomeAdvantage(Number(e.target.value))}
             />
-            <div className="param-hint">主队额外 ELO 加成，0 = 无主场优势</div>
+            <div className="param-hint">主队额外积分加成，0 = 无主场优势</div>
           </div>
 
           <div className="param-group">
@@ -566,6 +1167,66 @@ export default function PredictAdvanced() {
             </div>
           </div>
 
+          <div className="param-group">
+            <label className="param-label">
+              🏥 {tTeam(selectedMatch?.homeTeam || '')} 伤停影响{' '}
+              <span className="param-value">{homeInjuryImpact}</span>
+            </label>
+            <input
+              type="range"
+              min="1"
+              max="10"
+              step="1"
+              value={homeInjuryImpact}
+              onChange={(e) => setHomeInjuryImpact(Number(e.target.value))}
+            />
+            <label className="param-label">
+              🏥 {tTeam(selectedMatch?.awayTeam || '')} 伤停影响{' '}
+              <span className="param-value">{awayInjuryImpact}</span>
+            </label>
+            <input
+              type="range"
+              min="1"
+              max="10"
+              step="1"
+              value={awayInjuryImpact}
+              onChange={(e) => setAwayInjuryImpact(Number(e.target.value))}
+            />
+            <div className="param-hint">
+              主力伤停缺阵直接削弱球队实力，值越高表示伤停越严重
+            </div>
+          </div>
+
+          <div className="param-group">
+            <label className="param-label">
+              🏆 {tTeam(selectedMatch?.homeTeam || '')} 比赛重要性{' '}
+              <span className="param-value">{homeStakes}</span>
+            </label>
+            <input
+              type="range"
+              min="1"
+              max="10"
+              step="1"
+              value={homeStakes}
+              onChange={(e) => setHomeStakes(Number(e.target.value))}
+            />
+            <label className="param-label">
+              🏆 {tTeam(selectedMatch?.awayTeam || '')} 比赛重要性{' '}
+              <span className="param-value">{awayStakes}</span>
+            </label>
+            <input
+              type="range"
+              min="1"
+              max="10"
+              step="1"
+              value={awayStakes}
+              onChange={(e) => setAwayStakes(Number(e.target.value))}
+            />
+            <div className="param-hint">
+              淘汰赛、出线生死战等关键比赛对球队动力和表现影响显著
+            </div>
+          </div>
+
           <div className="param-divider" />
           <div className="param-group">
             <label className="param-label">
@@ -619,13 +1280,23 @@ export default function PredictAdvanced() {
             </div>
           </div>
 
-          <button
-            className="btn btn-primary predict-btn"
-            onClick={handlePredict}
-            disabled={predicting || !selectedMatch}
-          >
-            {predicting ? '预测中...' : '🔮 开始预测'}
-          </button>
+          <div className="predict-actions">
+            <button
+              className="btn btn-primary predict-btn"
+              onClick={handlePredict}
+              disabled={predicting || !selectedMatch}
+            >
+              {predicting ? '预测中...' : '🔮 开始预测'}
+            </button>
+            <button
+              className="btn btn-secondary save-params-btn"
+              onClick={handleSaveParams}
+              disabled={saving || !selectedMatch}
+            >
+              {saving ? '保存中...' : '💾 保存参数'}
+            </button>
+            {saveMsg && <span className="save-msg">{saveMsg}</span>}
+          </div>
         </div>
       </div>
 
@@ -638,7 +1309,7 @@ export default function PredictAdvanced() {
               <span className="rt-label">主队</span>
               <span className="rt-name">{tTeam(prediction.homeTeam)}</span>
               <span className="rt-rating">
-                ELO {Math.round(prediction.homeRating)}
+                集成 {Math.round(prediction.homeRating)}
               </span>
             </div>
             <div className="result-center">
@@ -658,7 +1329,7 @@ export default function PredictAdvanced() {
               <span className="rt-label">客队</span>
               <span className="rt-name">{tTeam(prediction.awayTeam)}</span>
               <span className="rt-rating">
-                ELO {Math.round(prediction.awayRating)}
+                集成 {Math.round(prediction.awayRating)}
               </span>
             </div>
           </div>
@@ -831,6 +1502,38 @@ export default function PredictAdvanced() {
               </span>
             </div>
             <div className="effect-card">
+              <span className="effect-label">🏥 伤停影响</span>
+              <span
+                className={`effect-value ${prediction.injuryEffect > 0 ? 'positive' : prediction.injuryEffect < 0 ? 'negative' : ''}`}
+              >
+                {prediction.injuryEffect > 0 ? '+' : ''}
+                {prediction.injuryEffect}
+              </span>
+              <span className="effect-desc">
+                {prediction.injuryEffect === 0
+                  ? '无差异'
+                  : prediction.injuryEffect > 0
+                    ? '客队伤停更严重'
+                    : '主队伤停更严重'}
+              </span>
+            </div>
+            <div className="effect-card">
+              <span className="effect-label">🏆 比赛重要性</span>
+              <span
+                className={`effect-value ${prediction.stakesEffect > 0 ? 'positive' : prediction.stakesEffect < 0 ? 'negative' : ''}`}
+              >
+                {prediction.stakesEffect > 0 ? '+' : ''}
+                {prediction.stakesEffect}
+              </span>
+              <span className="effect-desc">
+                {prediction.stakesEffect === 0
+                  ? '无差异'
+                  : prediction.stakesEffect > 0
+                    ? '主队更重视'
+                    : '客队更重视'}
+              </span>
+            </div>
+            <div className="effect-card">
               <span className="effect-label">⚖️ 公平维持</span>
               <span
                 className={`effect-value ${prediction.fairnessEffect > 0 ? 'positive' : prediction.fairnessEffect < 0 ? 'negative' : ''}`}
@@ -877,52 +1580,6 @@ export default function PredictAdvanced() {
                     ? '偏向主队'
                     : '偏向客队'}
               </span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {prediction && (
-        <div className="comparison-section">
-          <h3 className="comparison-title">🌐 博弈论分析</h3>
-
-          <div className="game-theory-analysis">
-            <div className="gta-card">
-              <div className="gta-header">
-                <span className="gta-icon">⚖️</span>
-                <span className="gta-title">比赛公平维持角度</span>
-              </div>
-              <p className="gta-text">
-                {prediction.fairnessEffect === 0
-                  ? '双方实力接近，公平维持机制无明显影响。'
-                  : prediction.fairnessEffect > 0
-                    ? `公平维持机制倾向于缩小差距，主队胜率被下调 ${Math.abs(prediction.fairnessEffect * 100).toFixed(1)}%，弱队获得更多机会。赛事组织方可能通过VAR介入、补时增加等方式平衡比赛。`
-                    : `公平维持机制倾向于缩小差距，客队胜率被下调 ${Math.abs(prediction.fairnessEffect * 100).toFixed(1)}%，弱队获得更多机会。赛事组织方可能通过VAR介入、补时增加等方式平衡比赛。`}
-              </p>
-            </div>
-            <div className="gta-card">
-              <div className="gta-header">
-                <span className="gta-icon">💰</span>
-                <span className="gta-title">国际足联推广收益角度</span>
-              </div>
-              <p className="gta-text">
-                {prediction.fifaEffect === 0
-                  ? '双方实力接近，商业推广因素无明显倾向。'
-                  : prediction.fifaEffect > 0
-                    ? `从商业推广角度，强队晋级有利于维持赛事关注度和赞助商利益。当前模型中FIFA收益因素使主队胜率提升 ${(prediction.fifaEffect * 100).toFixed(1)}%。`
-                    : `从商业推广角度，强队晋级有利于维持赛事关注度和赞助商利益。当前模型中FIFA收益因素使客队胜率提升 ${(Math.abs(prediction.fifaEffect) * 100).toFixed(1)}%。`}
-              </p>
-            </div>
-            <div className="gta-card">
-              <div className="gta-header">
-                <span className="gta-icon">🎰</span>
-                <span className="gta-title">资本庄家收益角度</span>
-              </div>
-              <p className="gta-text">
-                {prediction.bookmakerEffect === 0
-                  ? '双方概率均衡，庄家无需额外平衡投注。'
-                  : `博彩庄家倾向于平衡两边投注额以锁定利润。当前模型中庄家因素使主队胜率调整 ${(prediction.bookmakerEffect * 100).toFixed(1)}%，同时平局概率有所上升，因为平局是庄家利润最优解。`}
-              </p>
             </div>
           </div>
         </div>
