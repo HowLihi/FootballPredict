@@ -7,8 +7,8 @@ export default function Layout() {
       <header className="app-header">
         <div className="header-inner">
           <NavLink to="/" className="logo">
-            <span className="logo-icon">⚽</span>
-            <span className="logo-text">FootballPredict</span>
+            <span className="logo-icon">🏆</span>
+            <span className="logo-text">世界杯小组赛预测</span>
           </NavLink>
           <nav className="nav-links">
             <NavLink to="/" end>
@@ -25,7 +25,7 @@ export default function Layout() {
       </main>
       <footer className="app-footer">
         <p>
-          FootballPredict — 基于 ELO + 赔率 + 泊松 多模型集成的足球比赛预测系统
+          世界杯小组赛预测 — 基于 ELO + 赔率 + 泊松 多模型集成的足球比赛预测系统
         </p>
       </footer>
     </div>

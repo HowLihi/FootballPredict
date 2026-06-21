@@ -492,26 +492,158 @@
 }
 
 @media (max-width: 768px) {
+  .players-page {
+    padding: 16px 12px;
+    gap: 16px;
+  }
+
+  .players-page-header h1 {
+    font-size: 20px;
+  }
+
+  .page-desc {
+    font-size: 12px;
+  }
+
   .cpc-breakdown {
     grid-template-columns: repeat(2, 1fr);
   }
+
   .squad-stats-row {
     grid-template-columns: repeat(2, 1fr);
   }
+
   .squad-stats-row.squad-stats-5 {
     grid-template-columns: repeat(3, 1fr);
   }
+
   .theory-legend {
     grid-template-columns: 1fr;
   }
+
   .players-grid {
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 10px;
   }
+
   .team-selector-bar {
     flex-direction: column;
     align-items: stretch;
+    padding: 12px 14px;
+    gap: 8px;
   }
+
   .team-dropdown {
     max-width: none;
+  }
+
+  .combat-power-card {
+    padding: 16px;
+  }
+
+  .cpc-title {
+    font-size: 16px;
+    margin-bottom: 14px;
+  }
+
+  .cpc-value {
+    font-size: 40px;
+  }
+
+  .cpc-item-value {
+    font-size: 16px;
+  }
+
+  .squad-stat-value {
+    font-size: 15px;
+  }
+
+  .player-photo {
+    height: 120px;
+  }
+
+  .player-name {
+    font-size: 13px;
+  }
+
+  .player-overall {
+    font-size: 15px;
+  }
+}
+
+@media (max-width: 480px) {
+  .players-page {
+    padding: 12px 8px;
+  }
+
+  .players-page-header h1 {
+    font-size: 18px;
+  }
+
+  .cpc-breakdown {
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+
+  .squad-stats-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+
+  .squad-stats-row.squad-stats-5 {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .players-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .combat-power-card {
+    padding: 12px;
+  }
+
+  .cpc-value {
+    font-size: 34px;
+  }
+
+  .cpc-item {
+    padding: 8px;
+  }
+
+  .cpc-item-value {
+    font-size: 14px;
+  }
+
+  .cpc-item-label {
+    font-size: 10px;
+  }
+
+  .player-photo {
+    height: 100px;
+  }
+
+  .player-info {
+    padding: 8px;
+  }
+
+  .player-name {
+    font-size: 12px;
+  }
+
+  .player-overall {
+    font-size: 14px;
+  }
+
+  .squad-stat {
+    padding: 8px;
+  }
+
+  .squad-stat-value {
+    font-size: 14px;
+  }
+
+  .squad-stat-label {
+    font-size: 10px;
   }
 }

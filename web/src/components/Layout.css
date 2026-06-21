@@ -88,15 +88,62 @@
 
 @media (max-width: 768px) {
   .header-inner {
-    padding: 0 16px;
+    padding: 0 12px;
+    height: 52px;
+  }
+
+  .logo {
+    gap: 6px;
+    font-size: 16px;
+  }
+
+  .logo-icon {
+    font-size: 22px;
   }
 
   .logo-text {
-    display: none;
+    font-size: 15px;
+  }
+
+  .nav-links {
+    gap: 0;
   }
 
   .nav-links a {
-    padding: 8px 10px;
+    padding: 6px 8px;
+    font-size: 12px;
+    border-radius: 6px;
+  }
+
+  .app-main {
+    padding: 16px 12px;
+  }
+
+  .app-footer {
+    padding: 14px 12px;
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 480px) {
+  .header-inner {
+    height: 48px;
+  }
+
+  .logo-text {
     font-size: 13px;
+  }
+
+  .logo-icon {
+    font-size: 20px;
+  }
+
+  .nav-links a {
+    padding: 5px 6px;
+    font-size: 11px;
+  }
+
+  .app-main {
+    padding: 12px 8px;
   }
 }

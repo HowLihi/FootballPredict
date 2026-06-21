@@ -5,6 +5,19 @@ import { PoissonService } from './poisson.service';
 import { StackingService, BaseModelOutput } from './stacking.service';
 import { MatchParams } from './match-params.entity';
 
+export interface ParamCoefficients {
+  formAttack: number;
+  formDefend: number;
+  starPowerAttack: number;
+  fatigueAttack: number;
+  fatigueDefend: number;
+  pressureImpact: number;
+  injuryAttack: number;
+  injuryDefend: number;
+  stakesImpact: number;
+  fatigueInjuryInteraction: number;
+}
+
 export interface ParamWeights {
   formWeight: number;
   starPowerWeight: number;
@@ -289,6 +302,20 @@ export class EnsembleService {
       neutral,
     );
 
+    const w = this.paramWeights;
+    let homeWinProb = basePrediction.finalHomeWin;
+    const drawProb = basePrediction.finalDraw;
+    let awayWinProb = basePrediction.finalAwayWin;
+
+    const formBoost = ((params.homeForm - params.awayForm) / 10) * w.formWeight;
+    homeWinProb += formBoost * 0.5;
+    awayWinProb -= formBoost * 0.5;
+
+    const starBoost =
+      ((params.homeStarPower - params.awayStarPower) / 10) * w.starPowerWeight;
+    homeWinProb += starBoost * 0.3;
+    awayWinProb -= starBoost * 0.3;
+
     const total = homeGoals + awayGoals;
     const homeWinAdj =
       total > 0 ? homeGoals / total : basePrediction.finalHomeWin;
@@ -296,13 +323,17 @@ export class EnsembleService {
       total > 0 ? awayGoals / total : basePrediction.finalAwayWin;
     const drawAdj = Math.max(0, 1 - homeWinAdj - awayWinAdj);
 
-    const finalTotal = homeWinAdj + drawAdj + awayWinAdj;
+    const blendedHomeWin = homeWinProb * 0.4 + homeWinAdj * 0.6;
+    const blendedDraw = drawProb * 0.4 + drawAdj * 0.6;
+    const blendedAwayWin = awayWinProb * 0.4 + awayWinAdj * 0.6;
+
+    const finalTotal = blendedHomeWin + blendedDraw + blendedAwayWin;
 
     return {
       ...basePrediction,
-      finalHomeWin: Math.round((homeWinAdj / finalTotal) * 1000) / 1000,
-      finalDraw: Math.round((drawAdj / finalTotal) * 1000) / 1000,
-      finalAwayWin: Math.round((awayWinAdj / finalTotal) * 1000) / 1000,
+      finalHomeWin: Math.round((blendedHomeWin / finalTotal) * 1000) / 1000,
+      finalDraw: Math.round((blendedDraw / finalTotal) * 1000) / 1000,
+      finalAwayWin: Math.round((blendedAwayWin / finalTotal) * 1000) / 1000,
       predictedHomeScore: homeGoals,
       predictedAwayScore: awayGoals,
     };
@@ -323,6 +354,33 @@ export class EnsembleService {
     weatherWeight: 0.08,
     refereeWeight: 0.06,
   };
+
+  paramCoefficients: ParamCoefficients = {
+    formAttack: 0.1,
+    formDefend: 0.04,
+    starPowerAttack: 0.08,
+    fatigueAttack: 0.08,
+    fatigueDefend: 0.04,
+    pressureImpact: 0.05,
+    injuryAttack: 0.1,
+    injuryDefend: 0.05,
+    stakesImpact: 0.05,
+    fatigueInjuryInteraction: 0.02,
+  };
+
+  normalizeWeights(w: ParamWeights): ParamWeights {
+    const sum = Object.values(w).reduce((s, v) => s + v, 0);
+    if (sum === 0) return w;
+    const normalized = {} as ParamWeights;
+    for (const key of Object.keys(w) as (keyof ParamWeights)[]) {
+      normalized[key] = Math.round((w[key] / sum) * 1000) / 1000;
+    }
+    return normalized;
+  }
+
+  getNormalizedWeights(): ParamWeights {
+    return this.normalizeWeights(this.paramWeights);
+  }
 
   /**
    * 带 MatchParams 的比分预测
@@ -361,18 +419,18 @@ export class EnsembleService {
     }
 
     const w = this.paramWeights;
+    const c = this.paramCoefficients;
 
-    // 近期状态：状态越好，进球越多，对手进球越少
-    homeExpected += (params.homeForm - 5) * w.formWeight * 0.1;
-    awayExpected -= (params.homeForm - 5) * w.formWeight * 0.04;
-    awayExpected += (params.awayForm - 5) * w.formWeight * 0.1;
-    homeExpected -= (params.awayForm - 5) * w.formWeight * 0.04;
+    homeExpected += (params.homeForm - 5) * w.formWeight * c.formAttack;
+    awayExpected -= (params.homeForm - 5) * w.formWeight * c.formDefend;
+    awayExpected += (params.awayForm - 5) * w.formWeight * c.formAttack;
+    homeExpected -= (params.awayForm - 5) * w.formWeight * c.formDefend;
 
-    // 球星影响力：球星越多，进球能力越强
-    homeExpected += (params.homeStarPower - 5) * w.starPowerWeight * 0.08;
-    awayExpected += (params.awayStarPower - 5) * w.starPowerWeight * 0.08;
+    homeExpected +=
+      (params.homeStarPower - 5) * w.starPowerWeight * c.starPowerAttack;
+    awayExpected +=
+      (params.awayStarPower - 5) * w.starPowerWeight * c.starPowerAttack;
 
-    // 战术风格：进攻型增加双方进球，防守型减少
     const tacticsGoalImpact: Record<string, { home: number; away: number }> = {
       attacking: { home: 0.2, away: 0.1 },
       defensive: { home: -0.15, away: -0.1 },
@@ -393,37 +451,47 @@ export class EnsembleService {
     awayExpected += awayTacticsImpact.home * w.tacticsWeight;
     homeExpected -= awayTacticsImpact.away * w.tacticsWeight;
 
-    // 疲劳程度：越疲劳，进球越少，防守越差
-    homeExpected += (3 - params.homeFatigue) * w.fatigueWeight * 0.08;
-    awayExpected += (params.homeFatigue - 3) * w.fatigueWeight * 0.04;
-    awayExpected += (3 - params.awayFatigue) * w.fatigueWeight * 0.08;
-    homeExpected += (params.awayFatigue - 3) * w.fatigueWeight * 0.04;
+    homeExpected +=
+      (3 - params.homeFatigue) * w.fatigueWeight * c.fatigueAttack;
+    awayExpected +=
+      (params.homeFatigue - 3) * w.fatigueWeight * c.fatigueDefend;
+    awayExpected +=
+      (3 - params.awayFatigue) * w.fatigueWeight * c.fatigueAttack;
+    homeExpected +=
+      (params.awayFatigue - 3) * w.fatigueWeight * c.fatigueDefend;
 
-    // 心理压力：压力越大，发挥越差
-    homeExpected += (5 - params.homePressure) * w.pressureWeight * 0.05;
-    awayExpected += (5 - params.awayPressure) * w.pressureWeight * 0.05;
+    homeExpected +=
+      (5 - params.homePressure) * w.pressureWeight * c.pressureImpact;
+    awayExpected +=
+      (5 - params.awayPressure) * w.pressureWeight * c.pressureImpact;
 
-    // 伤病影响：伤病越严重，进球越少，防守越差
-    homeExpected += (1 - params.homeInjuryImpact) * w.injuryWeight * 0.1;
-    awayExpected += (params.homeInjuryImpact - 1) * w.injuryWeight * 0.05;
-    awayExpected += (1 - params.awayInjuryImpact) * w.injuryWeight * 0.1;
-    homeExpected += (params.awayInjuryImpact - 1) * w.injuryWeight * 0.05;
+    homeExpected +=
+      (1 - params.homeInjuryImpact) * w.injuryWeight * c.injuryAttack;
+    awayExpected +=
+      (params.homeInjuryImpact - 1) * w.injuryWeight * c.injuryDefend;
+    awayExpected +=
+      (1 - params.awayInjuryImpact) * w.injuryWeight * c.injuryAttack;
+    homeExpected +=
+      (params.awayInjuryImpact - 1) * w.injuryWeight * c.injuryDefend;
 
-    // 比赛重要性：重要性越高，进球可能略多（更拼）
-    homeExpected += (params.homeStakes - 5) * w.stakesWeight * 0.05;
-    awayExpected += (params.awayStakes - 5) * w.stakesWeight * 0.05;
+    const homeFatigueInjury =
+      (params.homeFatigue / 10) * (params.homeInjuryImpact / 10);
+    const awayFatigueInjury =
+      (params.awayFatigue / 10) * (params.awayInjuryImpact / 10);
+    homeExpected -= homeFatigueInjury * c.fatigueInjuryInteraction;
+    awayExpected -= awayFatigueInjury * c.fatigueInjuryInteraction;
 
-    // 分组强弱：强组比赛进球预期略高（强强对话更开放）
+    homeExpected += (params.homeStakes - 5) * w.stakesWeight * c.stakesImpact;
+    awayExpected += (params.awayStakes - 5) * w.stakesWeight * c.stakesImpact;
+
     const groupStrengthFactor = (params.groupStrength - 5) * 0.03;
     homeExpected += groupStrengthFactor;
     awayExpected += groupStrengthFactor;
 
-    // 轮次压力：越往后轮次，防守越谨慎，进球预期降低
     const roundPressureFactor = (params.roundNumber - 1) * 0.04;
     homeExpected -= roundPressureFactor * 0.5;
     awayExpected -= roundPressureFactor * 0.5;
 
-    // 晋级形势：必须赢的比赛进攻更激进，已出线/已淘汰则进攻意愿下降
     const qualificationFactors: Record<string, { home: number; away: number }> =
       {
         must_win: { home: 0.15, away: 0.05 },
@@ -439,7 +507,6 @@ export class EnsembleService {
     homeExpected += qf.home;
     awayExpected += qf.away;
 
-    // 天气影响：雨天/雪天/酷热减少进球
     const weatherGoalFactor: Record<string, number> = {
       sunny: 0,
       cloudy: -0.02,
@@ -452,7 +519,6 @@ export class EnsembleService {
     homeExpected += weatherImpact * w.weatherWeight;
     awayExpected += weatherImpact * w.weatherWeight;
 
-    // 裁判影响：严格裁判减少进球（更多中断），宽松裁判增加身体对抗
     const refereeGoalFactor: Record<string, number> = {
       lenient: 0.05,
       average: 0,

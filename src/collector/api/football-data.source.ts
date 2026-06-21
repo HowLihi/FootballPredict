@@ -151,8 +151,15 @@ export class FootballDataApiDataSource implements IDataSource {
       : '';
 
     // 解析比分信息
-    const homeScore = rawMatch.score?.fullTime?.home ?? null;
-    const awayScore = rawMatch.score?.fullTime?.away ?? null;
+    // 优先取 fullTime，若为空则依次 fallback 到 extraTime / penalties
+    const fullTime = rawMatch.score?.fullTime;
+    const extraTime = rawMatch.score?.extraTime;
+    const penalties = rawMatch.score?.penalties;
+
+    const homeScore =
+      fullTime?.home ?? extraTime?.home ?? penalties?.home ?? null;
+    const awayScore =
+      fullTime?.away ?? extraTime?.away ?? penalties?.away ?? null;
 
     // 将 API 的状态码映射为我们的统一状态
     const status = this.mapStatus(rawMatch.status);

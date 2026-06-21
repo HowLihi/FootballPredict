@@ -765,9 +765,14 @@
   transition: all 0.2s;
 }
 
-.btn-summary-edit:hover {
+.btn-summary-edit:hover:not(:disabled) {
   background: #6366f1;
   color: #fff;
+}
+
+.btn-summary-edit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .summary-placeholder {
@@ -1109,4 +1114,214 @@
 .sef-cancel-btn {
   padding: 6px 16px;
   font-size: 13px;
+}
+
+/* ===== Mobile Responsive ===== */
+@media (max-width: 768px) {
+  .predict-adv-page {
+    padding: 16px 12px;
+  }
+
+  .predict-adv-page h1 {
+    font-size: 20px;
+  }
+
+  .predict-layout {
+    gap: 16px;
+    margin-top: 16px;
+  }
+
+  .match-select-panel,
+  .params-panel {
+    padding: 14px;
+    border-radius: 10px;
+  }
+
+  .match-select-panel h3,
+  .params-panel h3 {
+    font-size: 14px;
+    margin-bottom: 10px;
+  }
+
+  .match-tabs {
+    gap: 2px;
+  }
+
+  .match-tab {
+    padding: 6px 8px;
+    font-size: 11px;
+  }
+
+  .match-list {
+    max-height: 350px;
+    gap: 6px;
+  }
+
+  .match-list-item {
+    padding: 8px 10px;
+  }
+
+  .mli-teams {
+    font-size: 13px;
+  }
+
+  .weather-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .predict-actions {
+    flex-direction: column;
+  }
+
+  .save-params-btn {
+    width: 100%;
+  }
+
+  .prediction-result {
+    padding: 16px;
+  }
+
+  .result-matchup {
+    gap: 16px;
+  }
+
+  .result-team {
+    min-width: 80px;
+  }
+
+  .rt-name {
+    font-size: 15px;
+  }
+
+  .result-score {
+    font-size: 28px;
+    letter-spacing: 2px;
+  }
+
+  .result-verdict {
+    font-size: 12px;
+  }
+
+  .result-effects {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .effect-card {
+    padding: 10px;
+  }
+
+  .effect-value {
+    font-size: 16px;
+  }
+
+  .summary-highlight-item {
+    flex-wrap: wrap;
+    padding: 8px 10px;
+  }
+
+  .sh-title {
+    font-size: 12px;
+  }
+
+  .sh-detail {
+    font-size: 11px;
+  }
+
+  .summary-edit-form {
+    gap: 8px;
+  }
+
+  .sef-highlight-row {
+    padding: 8px;
+  }
+
+  .sef-hr-top {
+    flex-wrap: wrap;
+  }
+
+  .referee-header {
+    gap: 4px;
+  }
+
+  .referee-name {
+    font-size: 12px;
+  }
+
+  .referee-summary {
+    font-size: 11px;
+  }
+
+  .param-label {
+    font-size: 12px;
+  }
+
+  .param-group input[type='range'] {
+    height: 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .predict-adv-page {
+    padding: 12px 8px;
+  }
+
+  .predict-adv-page h1 {
+    font-size: 18px;
+  }
+
+  .match-select-panel,
+  .params-panel {
+    padding: 10px;
+  }
+
+  .match-tab {
+    padding: 5px 4px;
+    font-size: 10px;
+  }
+
+  .tab-count {
+    font-size: 10px;
+    padding: 1px 4px;
+  }
+
+  .result-matchup {
+    gap: 8px;
+  }
+
+  .result-team {
+    min-width: 60px;
+  }
+
+  .rt-name {
+    font-size: 13px;
+  }
+
+  .rt-rating {
+    font-size: 10px;
+  }
+
+  .result-score {
+    font-size: 24px;
+  }
+
+  .result-effects {
+    grid-template-columns: 1fr;
+  }
+
+  .weather-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .weather-slot {
+    padding: 6px 2px;
+  }
+
+  .weather-icon {
+    font-size: 16px;
+  }
+
+  .weather-detail-item {
+    font-size: 10px;
+  }
 }

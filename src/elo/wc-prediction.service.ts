@@ -7,11 +7,15 @@ import { parse } from 'csv-parse';
 import axios from 'axios';
 import * as https from 'https';
 import { EloService, MatchPrediction } from './elo.service';
-import { EnsembleService } from './ensemble.service';
+import {
+  EnsembleService,
+  ParamWeights,
+  ParamCoefficients,
+} from './ensemble.service';
+import { StackingService } from './stacking.service';
 import { WcPrediction } from './wc-prediction.entity';
 import { MatchParams } from './match-params.entity';
 import { SquadService } from './squad.service';
-import { beijingDateAddDays, venueToBeijingTime } from './beijing-time';
 
 export interface WcFixture {
   date: string;
@@ -81,6 +85,7 @@ export class WcPredictionService {
     private readonly matchParamsRepository: Repository<MatchParams>,
     private readonly eloService: EloService,
     private readonly ensembleService: EnsembleService,
+    private readonly stackingService: StackingService,
     private readonly squadService: SquadService,
   ) {}
 
@@ -367,23 +372,8 @@ export class WcPredictionService {
   }
 
   async getRecentMatches(): Promise<WcPrediction[]> {
-    const weekLater = beijingDateAddDays(7);
-    const threeDaysAgo = beijingDateAddDays(-3);
-
-    const sqlStart = beijingDateAddDays(-3 - 1);
-    const sqlEnd = beijingDateAddDays(7 + 1);
-
-    const allMatches = await this.wcPredictionRepository
-      .createQueryBuilder('p')
-      .where('p.matchDate >= :sqlStart', { sqlStart })
-      .andWhere('p.matchDate <= :sqlEnd', { sqlEnd })
-      .orderBy('p.matchDate', 'ASC')
-      .addOrderBy('p.id', 'ASC')
-      .getMany();
-
-    return allMatches.filter((m) => {
-      const bjDate = venueToBeijingTime(m.matchDate, m.venue);
-      return bjDate >= threeDaysAgo && bjDate <= weekLater;
+    return this.wcPredictionRepository.find({
+      order: { matchDate: 'ASC', id: 'ASC' },
     });
   }
 
@@ -1030,6 +1020,26 @@ export class WcPredictionService {
     return updated;
   }
 
+  async getMissingScorePredictions(): Promise<WcPrediction[]> {
+    const today = new Date().toISOString().split('T')[0];
+
+    const all = await this.wcPredictionRepository.find({
+      where: { actualHomeScore: IsNull() },
+    });
+
+    return all.filter((p) => {
+      const datePart = p.matchDate.split(' ')[0];
+      return datePart < today;
+    });
+  }
+
+  async getAllMissingScorePredictions(): Promise<WcPrediction[]> {
+    return this.wcPredictionRepository.find({
+      where: { actualHomeScore: IsNull() },
+      order: { matchDate: 'ASC' },
+    });
+  }
+
   async gatherIntelligence(matchId: number): Promise<{
     summary: {
       highlights: Array<{
@@ -1617,17 +1627,10 @@ ${keyEventsText}
 
   async tunePredictionWorkflow(options?: {
     updateWeights?: boolean;
-    customWeights?: {
-      formWeight?: number;
-      starPowerWeight?: number;
-      tacticsWeight?: number;
-      fatigueWeight?: number;
-      pressureWeight?: number;
-      injuryWeight?: number;
-      stakesWeight?: number;
-      weatherWeight?: number;
-      refereeWeight?: number;
-    };
+    customWeights?: Partial<ParamWeights>;
+    customCoefficients?: Partial<ParamCoefficients>;
+    trainRatio?: number;
+    runsPerMatch?: number;
   }): Promise<{
     matches: Array<{
       matchId: number;
@@ -1642,9 +1645,19 @@ ${keyEventsText}
       intelligence: any;
       quantifiedParams: any;
       reasoning: string;
+      runDetails: Array<{
+        run: number;
+        basePrediction: string;
+        tunedPrediction: string;
+        baseError: number;
+        tunedError: number;
+      }>;
     }>;
     summary: {
       totalMatches: number;
+      trainMatches: number;
+      testMatches: number;
+      runsPerMatch: number;
       baseMAE: number;
       tunedMAE: number;
       baseRMSE: number;
@@ -1652,7 +1665,11 @@ ${keyEventsText}
       improvement: number;
       baseResultAccuracy: number;
       tunedResultAccuracy: number;
+      testBaseMAE: number;
+      testTunedMAE: number;
+      testImprovement: number;
       currentWeights: Record<string, number>;
+      currentCoefficients: Record<string, number>;
     };
   }> {
     const completedMatches = await this.wcPredictionRepository.find({
@@ -1670,131 +1687,62 @@ ${keyEventsText}
 
     if (options?.customWeights) {
       const w = options.customWeights;
-      if (w.formWeight !== undefined)
-        this.ensembleService.paramWeights.formWeight = w.formWeight;
-      if (w.starPowerWeight !== undefined)
-        this.ensembleService.paramWeights.starPowerWeight = w.starPowerWeight;
-      if (w.tacticsWeight !== undefined)
-        this.ensembleService.paramWeights.tacticsWeight = w.tacticsWeight;
-      if (w.fatigueWeight !== undefined)
-        this.ensembleService.paramWeights.fatigueWeight = w.fatigueWeight;
-      if (w.pressureWeight !== undefined)
-        this.ensembleService.paramWeights.pressureWeight = w.pressureWeight;
-      if (w.injuryWeight !== undefined)
-        this.ensembleService.paramWeights.injuryWeight = w.injuryWeight;
-      if (w.stakesWeight !== undefined)
-        this.ensembleService.paramWeights.stakesWeight = w.stakesWeight;
-      if (w.weatherWeight !== undefined)
-        this.ensembleService.paramWeights.weatherWeight = w.weatherWeight;
-      if (w.refereeWeight !== undefined)
-        this.ensembleService.paramWeights.refereeWeight = w.refereeWeight;
+      for (const [key, val] of Object.entries(w)) {
+        if (val !== undefined) {
+          (
+            this.ensembleService.paramWeights as unknown as Record<
+              string,
+              number
+            >
+          )[key] = val;
+        }
+      }
     }
 
-    const results: Array<{
-      matchId: number;
-      homeTeam: string;
-      awayTeam: string;
-      actualScore: string;
-      basePrediction: string;
-      tunedPrediction: string;
-      baseError: number;
-      tunedError: number;
-      improvement: number;
-      intelligence: any;
-      quantifiedParams: any;
-      reasoning: string;
-    }> = [];
-
-    for (const match of completedMatches) {
-      this.logger.log(`处理: ${match.homeTeam} vs ${match.awayTeam}`);
-
-      const { summary: intelligence } = await this.gatherIntelligence(match.id);
-
-      const { params, reasoning } = await this.quantifyIntelligence(
-        match.id,
-        intelligence,
-      );
-
-      const paramsEntity = await this.matchParamsRepository.findOne({
-        where: { matchId: match.id },
-      });
-      if (paramsEntity) {
-        Object.assign(paramsEntity, params, {
-          matchSummary: intelligence as any,
-        });
-        await this.matchParamsRepository.save(paramsEntity);
-      } else {
-        const newParams = this.matchParamsRepository.create({
-          matchId: match.id,
-          homeForm: params.homeForm,
-          awayForm: params.awayForm,
-          homeStarPower: params.homeStarPower,
-          awayStarPower: params.awayStarPower,
-          homeTactics: params.homeTactics,
-          awayTactics: params.awayTactics,
-          homeFatigue: params.homeFatigue,
-          awayFatigue: params.awayFatigue,
-          homePressure: params.homePressure,
-          awayPressure: params.awayPressure,
-          homeInjuryImpact: params.homeInjuryImpact,
-          awayInjuryImpact: params.awayInjuryImpact,
-          homeStakes: params.homeStakes,
-          awayStakes: params.awayStakes,
-          refereeStrictness: params.refereeStrictness,
-          weatherCondition: params.weatherCondition,
-          groupStrength: params.groupStrength,
-          roundNumber: params.roundNumber,
-          qualificationScenario: params.qualificationScenario,
-          matchSummary: intelligence as any,
-        } as any);
-        await this.matchParamsRepository.save(newParams);
+    if (options?.customCoefficients) {
+      const c = options.customCoefficients;
+      for (const [key, val] of Object.entries(c)) {
+        if (val !== undefined) {
+          (
+            this.ensembleService.paramCoefficients as unknown as Record<
+              string,
+              number
+            >
+          )[key] = val;
+        }
       }
+    }
 
-      const basePrediction = await this.ensembleService.predict(
-        match.homeTeam,
-        match.awayTeam,
-        match.neutral,
-      );
+    const trainRatio = options?.trainRatio ?? 0.7;
+    const runsPerMatch = options?.runsPerMatch ?? 3;
+    const splitIndex = Math.floor(completedMatches.length * trainRatio);
+    const trainMatches = completedMatches.slice(0, splitIndex);
+    const testMatches = completedMatches.slice(splitIndex);
 
-      const tunedPrediction = await this.ensembleService.predictWithParams(
-        match.homeTeam,
-        match.awayTeam,
-        match.neutral,
-        paramsEntity ||
-          (await this.matchParamsRepository.findOne({
-            where: { matchId: match.id },
-          })),
-      );
+    this.logger.log(
+      `训练集 ${trainMatches.length} 场，验证集 ${testMatches.length} 场，每场执行 ${runsPerMatch} 次`,
+    );
 
-      const actualHome = match.actualHomeScore!;
-      const actualAway = match.actualAwayScore!;
+    const results = await this.evaluateMatches(trainMatches, runsPerMatch);
 
-      const baseHomeScore = basePrediction?.predictedHomeScore ?? 0;
-      const baseAwayScore = basePrediction?.predictedAwayScore ?? 0;
-      const tunedHomeScore = tunedPrediction?.predictedHomeScore ?? 0;
-      const tunedAwayScore = tunedPrediction?.predictedAwayScore ?? 0;
+    if (options?.updateWeights !== false) {
+      for (const r of results) {
+        const [ah, aa] = r.actualScore.split('-').map(Number);
+        const actualOutcome: 'home' | 'draw' | 'away' =
+          ah > aa ? 'home' : ah < aa ? 'away' : 'draw';
 
-      const baseError =
-        Math.abs(baseHomeScore - actualHome) +
-        Math.abs(baseAwayScore - actualAway);
-      const tunedError =
-        Math.abs(tunedHomeScore - actualHome) +
-        Math.abs(tunedAwayScore - actualAway);
+        const [th, ta] = r.tunedPrediction.split('-').map(Number);
+        const predOutcome = th > ta ? 'home' : th < ta ? 'away' : 'draw';
+        const wasCorrect = predOutcome === actualOutcome;
 
-      results.push({
-        matchId: match.id,
-        homeTeam: match.homeTeam,
-        awayTeam: match.awayTeam,
-        actualScore: `${actualHome}-${actualAway}`,
-        basePrediction: `${baseHomeScore.toFixed(1)}-${baseAwayScore.toFixed(1)}`,
-        tunedPrediction: `${tunedHomeScore.toFixed(1)}-${tunedAwayScore.toFixed(1)}`,
-        baseError: Math.round(baseError * 100) / 100,
-        tunedError: Math.round(tunedError * 100) / 100,
-        improvement: Math.round((baseError - tunedError) * 100) / 100,
-        intelligence,
-        quantifiedParams: params,
-        reasoning,
-      });
+        for (const modelName of ['elo', 'odds', 'poisson'] as const) {
+          this.stackingService.updateWeights(
+            modelName,
+            wasCorrect,
+            actualOutcome,
+          );
+        }
+      }
     }
 
     const n = results.length;
@@ -1823,8 +1771,32 @@ ${keyEventsText}
       return predResult === actualResult;
     }).length;
 
+    let testBaseMAE = 0;
+    let testTunedMAE = 0;
+    let testImprovement = 0;
+
+    if (testMatches.length > 0) {
+      const testResults = await this.evaluateMatches(testMatches, runsPerMatch);
+      const tn = testResults.length;
+      testBaseMAE =
+        Math.round(
+          (testResults.reduce((s, r) => s + r.baseError, 0) / tn) * 100,
+        ) / 100;
+      testTunedMAE =
+        Math.round(
+          (testResults.reduce((s, r) => s + r.tunedError, 0) / tn) * 100,
+        ) / 100;
+      testImprovement = Math.round((testBaseMAE - testTunedMAE) * 100) / 100;
+      this.logger.log(
+        `验证集: 基础MAE=${testBaseMAE}, 调优MAE=${testTunedMAE}, 改善=${testImprovement}`,
+      );
+    }
+
     const summary = {
-      totalMatches: n,
+      totalMatches: completedMatches.length,
+      trainMatches: trainMatches.length,
+      testMatches: testMatches.length,
+      runsPerMatch,
       baseMAE: Math.round(baseMAE * 100) / 100,
       tunedMAE: Math.round(tunedMAE * 100) / 100,
       baseRMSE: Math.round(baseRMSE * 100) / 100,
@@ -1832,7 +1804,11 @@ ${keyEventsText}
       improvement: Math.round((baseMAE - tunedMAE) * 100) / 100,
       baseResultAccuracy: Math.round((baseResultCorrect / n) * 10000) / 100,
       tunedResultAccuracy: Math.round((tunedResultCorrect / n) * 10000) / 100,
+      testBaseMAE,
+      testTunedMAE,
+      testImprovement,
       currentWeights: { ...this.ensembleService.paramWeights },
+      currentCoefficients: { ...this.ensembleService.paramCoefficients },
     };
 
     this.logger.log(
@@ -1840,6 +1816,401 @@ ${keyEventsText}
     );
 
     return { matches: results, summary };
+  }
+
+  private async evaluateMatches(
+    matches: WcPrediction[],
+    runsPerMatch: number = 3,
+  ): Promise<
+    Array<{
+      matchId: number;
+      homeTeam: string;
+      awayTeam: string;
+      actualScore: string;
+      basePrediction: string;
+      tunedPrediction: string;
+      baseError: number;
+      tunedError: number;
+      improvement: number;
+      intelligence: any;
+      quantifiedParams: any;
+      reasoning: string;
+      runDetails: Array<{
+        run: number;
+        basePrediction: string;
+        tunedPrediction: string;
+        baseError: number;
+        tunedError: number;
+      }>;
+    }>
+  > {
+    const batchSize = 3;
+    const results: Array<{
+      matchId: number;
+      homeTeam: string;
+      awayTeam: string;
+      actualScore: string;
+      basePrediction: string;
+      tunedPrediction: string;
+      baseError: number;
+      tunedError: number;
+      improvement: number;
+      intelligence: any;
+      quantifiedParams: any;
+      reasoning: string;
+      runDetails: Array<{
+        run: number;
+        basePrediction: string;
+        tunedPrediction: string;
+        baseError: number;
+        tunedError: number;
+      }>;
+    }> = [];
+
+    for (let i = 0; i < matches.length; i += batchSize) {
+      const batch = matches.slice(i, i + batchSize);
+
+      const batchResults = await Promise.all(
+        batch.map(async (match) => {
+          this.logger.log(
+            `处理: ${match.homeTeam} vs ${match.awayTeam} (${runsPerMatch}次执行)`,
+          );
+
+          const actualHome = match.actualHomeScore!;
+          const actualAway = match.actualAwayScore!;
+
+          const basePrediction = await this.ensembleService.predict(
+            match.homeTeam,
+            match.awayTeam,
+            match.neutral,
+          );
+          const baseHomeScore = basePrediction?.predictedHomeScore ?? 0;
+          const baseAwayScore = basePrediction?.predictedAwayScore ?? 0;
+
+          const runDetails: Array<{
+            run: number;
+            basePrediction: string;
+            tunedPrediction: string;
+            baseError: number;
+            tunedError: number;
+          }> = [];
+
+          let sumTunedHome = 0;
+          let sumTunedAway = 0;
+          let lastIntelligence: any = null;
+          let lastParams: any = null;
+          let lastReasoning = '';
+
+          for (let run = 1; run <= runsPerMatch; run++) {
+            this.logger.log(
+              `  第 ${run}/${runsPerMatch} 次: ${match.homeTeam} vs ${match.awayTeam}`,
+            );
+
+            const { summary: intelligence } = await this.gatherIntelligence(
+              match.id,
+            );
+            lastIntelligence = intelligence;
+
+            const { params, reasoning } = await this.quantifyIntelligence(
+              match.id,
+              intelligence,
+            );
+            lastParams = params;
+            lastReasoning = reasoning;
+
+            const paramsEntity = await this.matchParamsRepository.findOne({
+              where: { matchId: match.id },
+            });
+            if (paramsEntity) {
+              Object.assign(paramsEntity, params, {
+                matchSummary: intelligence as any,
+              });
+              await this.matchParamsRepository.save(paramsEntity);
+            } else {
+              const newParams = this.matchParamsRepository.create({
+                matchId: match.id,
+                homeForm: params.homeForm,
+                awayForm: params.awayForm,
+                homeStarPower: params.homeStarPower,
+                awayStarPower: params.awayStarPower,
+                homeTactics: params.homeTactics,
+                awayTactics: params.awayTactics,
+                homeFatigue: params.homeFatigue,
+                awayFatigue: params.awayFatigue,
+                homePressure: params.homePressure,
+                awayPressure: params.awayPressure,
+                homeInjuryImpact: params.homeInjuryImpact,
+                awayInjuryImpact: params.awayInjuryImpact,
+                homeStakes: params.homeStakes,
+                awayStakes: params.awayStakes,
+                refereeStrictness: params.refereeStrictness,
+                weatherCondition: params.weatherCondition,
+                groupStrength: params.groupStrength,
+                roundNumber: params.roundNumber,
+                qualificationScenario: params.qualificationScenario,
+                matchSummary: intelligence as any,
+              } as any);
+              await this.matchParamsRepository.save(newParams);
+            }
+
+            const tunedPrediction =
+              await this.ensembleService.predictWithParams(
+                match.homeTeam,
+                match.awayTeam,
+                match.neutral,
+                paramsEntity ||
+                  (await this.matchParamsRepository.findOne({
+                    where: { matchId: match.id },
+                  })),
+              );
+
+            const tunedHomeScore = tunedPrediction?.predictedHomeScore ?? 0;
+            const tunedAwayScore = tunedPrediction?.predictedAwayScore ?? 0;
+
+            sumTunedHome += tunedHomeScore;
+            sumTunedAway += tunedAwayScore;
+
+            const runBaseError =
+              Math.abs(baseHomeScore - actualHome) +
+              Math.abs(baseAwayScore - actualAway);
+            const runTunedError =
+              Math.abs(tunedHomeScore - actualHome) +
+              Math.abs(tunedAwayScore - actualAway);
+
+            runDetails.push({
+              run,
+              basePrediction: `${baseHomeScore.toFixed(1)}-${baseAwayScore.toFixed(1)}`,
+              tunedPrediction: `${tunedHomeScore.toFixed(1)}-${tunedAwayScore.toFixed(1)}`,
+              baseError: Math.round(runBaseError * 100) / 100,
+              tunedError: Math.round(runTunedError * 100) / 100,
+            });
+          }
+
+          const avgTunedHome = sumTunedHome / runsPerMatch;
+          const avgTunedAway = sumTunedAway / runsPerMatch;
+
+          const baseError =
+            Math.abs(baseHomeScore - actualHome) +
+            Math.abs(baseAwayScore - actualAway);
+          const tunedError =
+            Math.abs(avgTunedHome - actualHome) +
+            Math.abs(avgTunedAway - actualAway);
+
+          return {
+            matchId: match.id,
+            homeTeam: match.homeTeam,
+            awayTeam: match.awayTeam,
+            actualScore: `${actualHome}-${actualAway}`,
+            basePrediction: `${baseHomeScore.toFixed(1)}-${baseAwayScore.toFixed(1)}`,
+            tunedPrediction: `${avgTunedHome.toFixed(1)}-${avgTunedAway.toFixed(1)}`,
+            baseError: Math.round(baseError * 100) / 100,
+            tunedError: Math.round(tunedError * 100) / 100,
+            improvement: Math.round((baseError - tunedError) * 100) / 100,
+            intelligence: lastIntelligence,
+            quantifiedParams: lastParams,
+            reasoning: lastReasoning,
+            runDetails,
+          };
+        }),
+      );
+
+      results.push(...batchResults);
+    }
+
+    return results;
+  }
+
+  async autoTuneWeights(options?: {
+    iterations?: number;
+    learningRate?: number;
+    trainRatio?: number;
+    runsPerMatch?: number;
+  }): Promise<{
+    bestWeights: ParamWeights;
+    bestCoefficients: ParamCoefficients;
+    bestTrainMAE: number;
+    bestTestMAE: number;
+    history: Array<{
+      iteration: number;
+      trainMAE: number;
+      testMAE: number;
+      weights: ParamWeights;
+    }>;
+  }> {
+    const iterations = options?.iterations ?? 50;
+    const learningRate = options?.learningRate ?? 0.02;
+    const trainRatio = options?.trainRatio ?? 0.7;
+    const runsPerMatch = options?.runsPerMatch ?? 3;
+
+    const completedMatches = await this.wcPredictionRepository.find({
+      where: { actualHomeScore: Not(IsNull()) },
+      order: { matchDate: 'ASC' },
+    });
+
+    if (completedMatches.length < 3) {
+      throw new Error('已完成比赛数量不足，无法进行自动调优');
+    }
+
+    const splitIndex = Math.floor(completedMatches.length * trainRatio);
+    const trainMatches = completedMatches.slice(0, splitIndex);
+    const testMatches = completedMatches.slice(splitIndex);
+
+    let bestWeights: ParamWeights = { ...this.ensembleService.paramWeights };
+    let bestCoefficients: ParamCoefficients = {
+      ...this.ensembleService.paramCoefficients,
+    };
+    let bestTrainMAE = Infinity;
+    let bestTestMAE = Infinity;
+
+    const history: Array<{
+      iteration: number;
+      trainMAE: number;
+      testMAE: number;
+      weights: ParamWeights;
+    }> = [];
+
+    this.logger.log(
+      `开始自动权重搜索，${iterations} 次迭代，训练集 ${trainMatches.length} 场，验证集 ${testMatches.length} 场，每场 ${runsPerMatch} 次执行`,
+    );
+
+    for (let i = 0; i < iterations; i++) {
+      const candidateWeights = this.perturbWeights(bestWeights, learningRate);
+      const candidateCoefficients = this.perturbCoefficients(
+        bestCoefficients,
+        learningRate,
+      );
+
+      this.ensembleService.paramWeights = candidateWeights;
+      this.ensembleService.paramCoefficients = candidateCoefficients;
+
+      try {
+        const trainResults = await this.evaluateMatches(
+          trainMatches,
+          runsPerMatch,
+        );
+        const trainMAE =
+          trainResults.reduce((s, r) => s + r.tunedError, 0) /
+          trainResults.length;
+
+        let testMAE = trainMAE;
+        if (testMatches.length > 0) {
+          const testResults = await this.evaluateMatches(
+            testMatches,
+            runsPerMatch,
+          );
+          testMAE =
+            testResults.reduce((s, r) => s + r.tunedError, 0) /
+            testResults.length;
+        }
+
+        history.push({
+          iteration: i,
+          trainMAE: Math.round(trainMAE * 100) / 100,
+          testMAE: Math.round(testMAE * 100) / 100,
+          weights: { ...candidateWeights },
+        });
+
+        if (testMAE < bestTestMAE) {
+          bestTrainMAE = trainMAE;
+          bestTestMAE = testMAE;
+          bestWeights = { ...candidateWeights };
+          bestCoefficients = { ...candidateCoefficients };
+          this.logger.log(
+            `迭代 ${i}: 新最优 testMAE=${bestTestMAE.toFixed(3)}, trainMAE=${bestTrainMAE.toFixed(3)}`,
+          );
+        }
+      } catch {
+        this.logger.warn(`迭代 ${i} 评估失败，跳过`);
+      }
+    }
+
+    this.ensembleService.paramWeights = bestWeights;
+    this.ensembleService.paramCoefficients = bestCoefficients;
+
+    await this.persistWeights(bestWeights, bestCoefficients);
+
+    this.logger.log(
+      `自动调优完成: 最优 trainMAE=${bestTrainMAE.toFixed(3)}, testMAE=${bestTestMAE.toFixed(3)}`,
+    );
+
+    return {
+      bestWeights,
+      bestCoefficients,
+      bestTrainMAE: Math.round(bestTrainMAE * 100) / 100,
+      bestTestMAE: Math.round(bestTestMAE * 100) / 100,
+      history,
+    };
+  }
+
+  private perturbWeights(base: ParamWeights, rate: number): ParamWeights {
+    const result = {} as ParamWeights;
+    for (const key of Object.keys(base) as (keyof ParamWeights)[]) {
+      const perturbation = (Math.random() - 0.5) * 2 * rate;
+      result[key] = Math.max(0.01, Math.min(0.5, base[key] + perturbation));
+    }
+    return this.ensembleService.normalizeWeights(result);
+  }
+
+  private perturbCoefficients(
+    base: ParamCoefficients,
+    rate: number,
+  ): ParamCoefficients {
+    const result = {} as ParamCoefficients;
+    for (const key of Object.keys(base) as (keyof ParamCoefficients)[]) {
+      const perturbation = (Math.random() - 0.5) * 2 * rate;
+      result[key] = Math.max(0.001, base[key] + perturbation);
+    }
+    return result;
+  }
+
+  private async persistWeights(
+    weights: ParamWeights,
+    coefficients: ParamCoefficients,
+  ): Promise<void> {
+    const filePath = path.join(process.cwd(), 'data', 'tuning-weights.json');
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify(
+        { weights, coefficients, updatedAt: new Date().toISOString() },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+    this.logger.log(`权重已持久化到 ${filePath}`);
+  }
+
+  async loadPersistedWeights(): Promise<boolean> {
+    const filePath = path.join(process.cwd(), 'data', 'tuning-weights.json');
+    if (!fs.existsSync(filePath)) return false;
+    try {
+      const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+      if (data.weights) {
+        this.ensembleService.paramWeights = data.weights;
+      }
+      if (data.coefficients) {
+        this.ensembleService.paramCoefficients = data.coefficients;
+      }
+      this.logger.log('已从持久化文件加载权重');
+      return true;
+    } catch {
+      this.logger.warn('加载持久化权重失败');
+      return false;
+    }
+  }
+
+  getEnsembleWeightsAndCoefficients(): {
+    weights: ParamWeights;
+    coefficients: ParamCoefficients;
+  } {
+    return {
+      weights: { ...this.ensembleService.paramWeights },
+      coefficients: { ...this.ensembleService.paramCoefficients },
+    };
   }
 
   private getDefaultGameTheoryAnalysis(

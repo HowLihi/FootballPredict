@@ -565,7 +565,7 @@ export default function PredictAdvanced() {
                   <button
                     className="btn-gather-intel"
                     onClick={handleGatherIntelligence}
-                    disabled={gatheringIntelligence}
+                    disabled={gatheringIntelligence || quantifying}
                   >
                     {gatheringIntelligence ? '⏳ 搜集中...' : '🔍 搜集情报'}
                   </button>
@@ -573,7 +573,7 @@ export default function PredictAdvanced() {
                     <button
                       className="btn-quantify-intel"
                       onClick={handleQuantifyIntelligence}
-                      disabled={quantifying}
+                      disabled={quantifying || gatheringIntelligence}
                     >
                       {quantifying ? '⏳ 量化中...' : '📊 量化参数'}
                     </button>
@@ -581,6 +581,7 @@ export default function PredictAdvanced() {
                   <button
                     className="btn-summary-edit"
                     onClick={startEditSummary}
+                    disabled={gatheringIntelligence || quantifying}
                   >
                     {matchSummary ? '✏️ 编辑' : '➕ 添加'}
                   </button>
@@ -1284,14 +1285,21 @@ export default function PredictAdvanced() {
             <button
               className="btn btn-primary predict-btn"
               onClick={handlePredict}
-              disabled={predicting || !selectedMatch}
+              disabled={
+                predicting ||
+                !selectedMatch ||
+                gatheringIntelligence ||
+                quantifying
+              }
             >
               {predicting ? '预测中...' : '🔮 开始预测'}
             </button>
             <button
               className="btn btn-secondary save-params-btn"
               onClick={handleSaveParams}
-              disabled={saving || !selectedMatch}
+              disabled={
+                saving || !selectedMatch || gatheringIntelligence || quantifying
+              }
             >
               {saving ? '保存中...' : '💾 保存参数'}
             </button>

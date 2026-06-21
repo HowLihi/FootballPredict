@@ -22,10 +22,20 @@ body {
   margin: 0;
   background: #0f1117;
   color: #e0e0e0;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 a {
   color: inherit;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+  touch-action: manipulation;
 }
 
 .loading {

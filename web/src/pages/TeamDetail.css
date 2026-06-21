@@ -161,7 +161,82 @@
 }
 
 @media (max-width: 768px) {
+  .team-detail {
+    gap: 18px;
+  }
+
+  .team-header h1 {
+    font-size: 22px;
+  }
+
+  .team-rating-badge {
+    font-size: 14px;
+    padding: 4px 12px;
+  }
+
   .team-stats-grid {
     grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .team-stat-card {
+    padding: 12px;
+  }
+
+  .team-stat-value {
+    font-size: 20px;
+  }
+
+  .team-stat-label {
+    font-size: 11px;
+  }
+
+  .history-section h2 {
+    font-size: 17px;
+  }
+
+  .history-table {
+    font-size: 12px;
+  }
+
+  .history-table th,
+  .history-table td {
+    padding: 8px 10px;
+  }
+
+  .history-table th {
+    font-size: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .team-header h1 {
+    font-size: 18px;
+  }
+
+  .team-rating-badge {
+    font-size: 12px;
+    padding: 3px 10px;
+  }
+
+  .team-stats-grid {
+    gap: 6px;
+  }
+
+  .team-stat-card {
+    padding: 10px;
+  }
+
+  .team-stat-value {
+    font-size: 18px;
+  }
+
+  .history-table {
+    font-size: 11px;
+  }
+
+  .history-table th,
+  .history-table td {
+    padding: 6px 8px;
   }
 }

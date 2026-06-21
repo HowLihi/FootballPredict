@@ -31,11 +31,13 @@ export default function RecentMatches() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const scrollToMatchRef = useRef<number | null>(null);
 
   const [selectedMatch, setSelectedMatch] = useState<WcPrediction | null>(null);
   const [prediction, setPrediction] = useState<EnsemblePrediction | null>(null);
   const [predLoading, setPredLoading] = useState(false);
   const [predError, setPredError] = useState('');
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
 
   const loadMatches = useCallback(async () => {
     setError('');
@@ -56,6 +58,24 @@ export default function RecentMatches() {
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [loadMatches]);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  useEffect(() => {
+    if (!isMobile || !scrollToMatchRef.current) return;
+    const id = scrollToMatchRef.current;
+    scrollToMatchRef.current = null;
+    requestAnimationFrame(() => {
+      const el = document.querySelector(`[data-match-id="${id}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    });
+  }, [prediction, predError, isMobile]);
 
   const loadPrediction = async (m: WcPrediction) => {
     setPredLoading(true);
@@ -84,6 +104,7 @@ export default function RecentMatches() {
       return;
     }
     setSelectedMatch(m);
+    scrollToMatchRef.current = m.id;
     loadPrediction(m);
   };
 
@@ -181,6 +202,342 @@ export default function RecentMatches() {
         : '平局'
     : '';
 
+  const renderPredictionDetail = () => {
+    if (!selectedMatch && !predLoading) {
+      return (
+        <div className="detail-placeholder">
+          <div className="placeholder-icon">🧠</div>
+          <p>点击比赛卡片，查看三模型集成预测详情</p>
+          <p className="placeholder-hint">
+            系统将融合 ELO、赔率、泊松三个模型，通过动态权重给出最优预测
+          </p>
+        </div>
+      );
+    }
+
+    if (selectedMatch && predLoading) {
+      return (
+        <div className="detail-placeholder">
+          <div className="placeholder-icon">⏳</div>
+          <p>
+            正在分析 {tTeam(selectedMatch.homeTeam)} vs{' '}
+            {tTeam(selectedMatch.awayTeam)}...
+          </p>
+        </div>
+      );
+    }
+
+    if (predError) {
+      return (
+        <div className="detail-placeholder">
+          <div className="placeholder-icon">⚠️</div>
+          <p>预测失败: {predError}</p>
+        </div>
+      );
+    }
+
+    if (prediction && selectedMatch) {
+      return (
+        <div className="ensemble-result">
+          <div className="result-header">
+            <h2>集成预测</h2>
+            <span
+              className="confidence-badge"
+              style={{
+                color: CONFIDENCE_LABELS[prediction.confidence]?.color,
+                borderColor: CONFIDENCE_LABELS[prediction.confidence]?.color,
+                background:
+                  CONFIDENCE_LABELS[prediction.confidence]?.color + '12',
+              }}
+            >
+              {CONFIDENCE_LABELS[prediction.confidence]?.text}
+            </span>
+          </div>
+
+          {selectedMatch.actualHomeScore !== null &&
+            selectedMatch.actualAwayScore !== null && (
+              <div className="result-actual">
+                <div className="ra-label">最终比分</div>
+                <div className="ra-score-row">
+                  <div className="ra-team">
+                    <span className="ra-team-flag">
+                      {getTeamFlag(selectedMatch.homeTeam)}
+                    </span>
+                    <span className="ra-team-name">
+                      {tTeam(selectedMatch.homeTeam)}
+                    </span>
+                  </div>
+                  <div className="ra-score-center">
+                    <span className="ra-score-num">
+                      {selectedMatch.actualHomeScore}
+                    </span>
+                    <span className="ra-score-sep">:</span>
+                    <span className="ra-score-num">
+                      {selectedMatch.actualAwayScore}
+                    </span>
+                  </div>
+                  <div className="ra-team">
+                    <span className="ra-team-name">
+                      {tTeam(selectedMatch.awayTeam)}
+                    </span>
+                    <span className="ra-team-flag">
+                      {getTeamFlag(selectedMatch.awayTeam)}
+                    </span>
+                  </div>
+                </div>
+                <div className="ra-compare">
+                  <div className="ra-compare-item">
+                    <span className="ra-compare-label">预测比分</span>
+                    <span className="ra-compare-value">
+                      {prediction.predictedHomeScore.toFixed(1)} :{' '}
+                      {prediction.predictedAwayScore.toFixed(1)}
+                    </span>
+                  </div>
+                  <div className="ra-compare-item">
+                    <span className="ra-compare-label">预测方向</span>
+                    <span className="ra-compare-value">{predictedLabel}</span>
+                  </div>
+                  <div
+                    className={`ra-compare-item ra-result ${selectedMatch.resultCorrect ? 'correct' : 'wrong'}`}
+                  >
+                    <span className="ra-compare-label">预测结果</span>
+                    <span className="ra-compare-value">
+                      {selectedMatch.resultCorrect ? '✅ 正确' : '❌ 错误'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+          {selectedMatch.actualHomeScore === null && (
+            <div className="result-matchup">
+              <div className="rm-team rm-home">
+                <div className="rm-team-flag">
+                  {getTeamFlag(prediction.homeTeam)}
+                </div>
+                <div className="rm-team-info">
+                  <span className="rm-team-name">
+                    {tTeam(prediction.homeTeam)}
+                  </span>
+                  <span className="rm-team-rating">
+                    ELO {Math.round(prediction.homeRating)}
+                  </span>
+                </div>
+              </div>
+              <div className="rm-center">
+                <div className="rm-score">
+                  <span className="rm-score-num">
+                    {prediction.predictedHomeScore.toFixed(1)}
+                  </span>
+                  <span className="rm-score-sep">:</span>
+                  <span className="rm-score-num">
+                    {prediction.predictedAwayScore.toFixed(1)}
+                  </span>
+                </div>
+                <div className="rm-verdict">{predictedLabel}</div>
+              </div>
+              <div className="rm-team rm-away">
+                <div className="rm-team-info">
+                  <span className="rm-team-name">
+                    {tTeam(prediction.awayTeam)}
+                  </span>
+                  <span className="rm-team-rating">
+                    ELO {Math.round(prediction.awayRating)}
+                  </span>
+                </div>
+                <div className="rm-team-flag">
+                  {getTeamFlag(prediction.awayTeam)}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="result-probs-compact">
+            <div className="rpc-bar">
+              <div
+                className="rpc-seg rpc-home"
+                style={{ width: `${prediction.finalHomeWin * 100}%` }}
+              />
+              <div
+                className="rpc-seg rpc-draw"
+                style={{ width: `${prediction.finalDraw * 100}%` }}
+              />
+              <div
+                className="rpc-seg rpc-away"
+                style={{ width: `${prediction.finalAwayWin * 100}%` }}
+              />
+            </div>
+            <div className="rpc-labels">
+              <span className="rpc-label-item">
+                <span className="rpc-dot home" />
+                主胜{' '}
+                <strong>{(prediction.finalHomeWin * 100).toFixed(1)}%</strong>
+              </span>
+              <span className="rpc-label-item">
+                <span className="rpc-dot draw" />
+                平局 <strong>{(prediction.finalDraw * 100).toFixed(1)}%</strong>
+              </span>
+              <span className="rpc-label-item">
+                <span className="rpc-dot away" />
+                客胜{' '}
+                <strong>{(prediction.finalAwayWin * 100).toFixed(1)}%</strong>
+              </span>
+            </div>
+          </div>
+
+          <div className="divider" />
+
+          <h3>📊 三模型对比</h3>
+          <div className="models-compare">
+            <div className="mc-header">
+              <span className="mc-blank" />
+              <span className="mc-col-label">主胜</span>
+              <span className="mc-col-label">平局</span>
+              <span className="mc-col-label">客胜</span>
+            </div>
+            {Object.entries(prediction.individualModels).map(([key, model]) => {
+              const contribution = prediction.modelContributions.find(
+                (c) => c.modelName === key,
+              );
+              const hw = 'homeWin' in model ? model.homeWin : 0;
+              const dr = 'draw' in model ? model.draw : 0;
+              const aw = 'awayWin' in model ? model.awayWin : 0;
+              const modelMax = Math.max(hw, dr, aw);
+
+              return (
+                <div key={key} className="mc-row">
+                  <span className="mc-model-name">
+                    <span
+                      className="mc-dot"
+                      style={{ background: MODEL_COLORS[key] || '#888' }}
+                    />
+                    {MODEL_LABELS[key] || key}
+                    <span className="mc-weight">
+                      {contribution
+                        ? (contribution.weight * 100).toFixed(0)
+                        : '-'}
+                      %
+                    </span>
+                  </span>
+                  <span className={`mc-val ${hw === modelMax ? 'mc-max' : ''}`}>
+                    {(hw * 100).toFixed(1)}%
+                  </span>
+                  <span className={`mc-val ${dr === modelMax ? 'mc-max' : ''}`}>
+                    {(dr * 100).toFixed(1)}%
+                  </span>
+                  <span className={`mc-val ${aw === modelMax ? 'mc-max' : ''}`}>
+                    {(aw * 100).toFixed(1)}%
+                  </span>
+                </div>
+              );
+            })}
+            <div className="mc-row mc-row-final">
+              <span className="mc-model-name">
+                <span className="mc-dot" style={{ background: '#fff' }} />
+                集成结果
+              </span>
+              <span
+                className={`mc-val ${prediction.finalHomeWin === maxProb ? 'mc-max' : ''}`}
+              >
+                {(prediction.finalHomeWin * 100).toFixed(1)}%
+              </span>
+              <span
+                className={`mc-val ${prediction.finalDraw === maxProb ? 'mc-max' : ''}`}
+              >
+                {(prediction.finalDraw * 100).toFixed(1)}%
+              </span>
+              <span
+                className={`mc-val ${prediction.finalAwayWin === maxProb ? 'mc-max' : ''}`}
+              >
+                {(prediction.finalAwayWin * 100).toFixed(1)}%
+              </span>
+            </div>
+          </div>
+
+          {'poisson' in prediction.individualModels && (
+            <>
+              <div className="divider" />
+              <div className="poisson-extra">
+                <div className="pe-item">
+                  <span className="pe-label">预期进球</span>
+                  <span className="pe-value">
+                    {prediction.individualModels.poisson.homeGoalsExpected.toFixed(
+                      2,
+                    )}{' '}
+                    —{' '}
+                    {prediction.individualModels.poisson.awayGoalsExpected.toFixed(
+                      2,
+                    )}
+                  </span>
+                </div>
+                <div className="pe-item">
+                  <span className="pe-label">最可能比分</span>
+                  <span className="pe-value pe-score">
+                    {prediction.individualModels.poisson.mostLikelyScore}
+                  </span>
+                </div>
+              </div>
+            </>
+          )}
+
+          <div className="divider" />
+
+          <h3>🔗 模型贡献度</h3>
+          <div className="contributions">
+            {prediction.modelContributions.map((c) => (
+              <div key={c.modelName} className="contrib-item">
+                <span
+                  className="contrib-dot"
+                  style={{
+                    background: MODEL_COLORS[c.modelName] || '#888',
+                  }}
+                />
+                <span className="contrib-name">
+                  {MODEL_LABELS[c.modelName] || c.modelName}
+                </span>
+                <div className="contrib-bar-track">
+                  <div
+                    className="contrib-bar-fill"
+                    style={{
+                      width: `${(c.contribution / Math.max(...prediction.modelContributions.map((x) => x.contribution))) * 100}%`,
+                      background: MODEL_COLORS[c.modelName] || '#888',
+                    }}
+                  />
+                </div>
+                <span className="contrib-pct">
+                  {(
+                    (c.contribution /
+                      prediction.modelContributions.reduce(
+                        (s, x) => s + x.contribution,
+                        0,
+                      )) *
+                    100
+                  ).toFixed(0)}
+                  %
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <div className="result-meta">
+            <span>
+              🏠{' '}
+              {prediction.homeAdvantage > 0
+                ? `主场优势 +${prediction.homeAdvantage}`
+                : '中立场地'}
+            </span>
+            <span>
+              ⚔️ 实力差{' '}
+              {Math.round(prediction.homeRating - prediction.awayRating)} ELO
+            </span>
+          </div>
+        </div>
+      );
+    }
+
+    return null;
+  };
+
   return (
     <div className="recent-page">
       <div className="recent-header">
@@ -205,13 +562,23 @@ export default function RecentMatches() {
               </h2>
               <div className="match-cards">
                 {liveMatches.map((m) => (
-                  <MatchCard
+                  <div
+                    className={`match-card-wrapper${isMobile && selectedMatch?.id === m.id ? ' expanded' : ''}`}
                     key={m.id}
-                    match={m}
-                    isLive
-                    selected={selectedMatch?.id === m.id}
-                    onSelect={() => handleSelectMatch(m)}
-                  />
+                    data-match-id={m.id}
+                  >
+                    <MatchCard
+                      match={m}
+                      isLive
+                      selected={selectedMatch?.id === m.id}
+                      onSelect={() => handleSelectMatch(m)}
+                    />
+                    {isMobile && selectedMatch?.id === m.id && (
+                      <div className="recent-detail-inline">
+                        {renderPredictionDetail()}
+                      </div>
+                    )}
+                  </div>
                 ))}
               </div>
             </section>
@@ -225,12 +592,22 @@ export default function RecentMatches() {
                   <h3 className="date-label">{formatDate(date)}</h3>
                   <div className="match-cards">
                     {list.map((m) => (
-                      <MatchCard
+                      <div
+                        className={`match-card-wrapper${isMobile && selectedMatch?.id === m.id ? ' expanded' : ''}`}
                         key={m.id}
-                        match={m}
-                        selected={selectedMatch?.id === m.id}
-                        onSelect={() => handleSelectMatch(m)}
-                      />
+                        data-match-id={m.id}
+                      >
+                        <MatchCard
+                          match={m}
+                          selected={selectedMatch?.id === m.id}
+                          onSelect={() => handleSelectMatch(m)}
+                        />
+                        {isMobile && selectedMatch?.id === m.id && (
+                          <div className="recent-detail-inline">
+                            {renderPredictionDetail()}
+                          </div>
+                        )}
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -246,13 +623,23 @@ export default function RecentMatches() {
                   <h3 className="date-label">{formatDate(date)}</h3>
                   <div className="match-cards">
                     {list.map((m) => (
-                      <MatchCard
+                      <div
+                        className={`match-card-wrapper${isMobile && selectedMatch?.id === m.id ? ' expanded' : ''}`}
                         key={m.id}
-                        match={m}
-                        isFinished
-                        selected={selectedMatch?.id === m.id}
-                        onSelect={() => handleSelectMatch(m)}
-                      />
+                        data-match-id={m.id}
+                      >
+                        <MatchCard
+                          match={m}
+                          isFinished
+                          selected={selectedMatch?.id === m.id}
+                          onSelect={() => handleSelectMatch(m)}
+                        />
+                        {isMobile && selectedMatch?.id === m.id && (
+                          <div className="recent-detail-inline">
+                            {renderPredictionDetail()}
+                          </div>
+                        )}
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -261,348 +648,9 @@ export default function RecentMatches() {
           )}
         </div>
 
-        <div className="recent-detail-panel">
-          {!selectedMatch && !predLoading && (
-            <div className="detail-placeholder">
-              <div className="placeholder-icon">🧠</div>
-              <p>点击左侧比赛卡片，查看三模型集成预测详情</p>
-              <p className="placeholder-hint">
-                系统将融合 ELO、赔率、泊松三个模型，通过动态权重给出最优预测
-              </p>
-            </div>
-          )}
-
-          {selectedMatch && predLoading && (
-            <div className="detail-placeholder">
-              <div className="placeholder-icon">⏳</div>
-              <p>
-                正在分析 {tTeam(selectedMatch.homeTeam)} vs{' '}
-                {tTeam(selectedMatch.awayTeam)}...
-              </p>
-            </div>
-          )}
-
-          {predError && (
-            <div className="detail-placeholder">
-              <div className="placeholder-icon">⚠️</div>
-              <p>预测失败: {predError}</p>
-            </div>
-          )}
-
-          {prediction && (
-            <div className="ensemble-result">
-              <div className="result-header">
-                <h2>集成预测</h2>
-                <span
-                  className="confidence-badge"
-                  style={{
-                    color: CONFIDENCE_LABELS[prediction.confidence]?.color,
-                    borderColor:
-                      CONFIDENCE_LABELS[prediction.confidence]?.color,
-                    background:
-                      CONFIDENCE_LABELS[prediction.confidence]?.color + '12',
-                  }}
-                >
-                  {CONFIDENCE_LABELS[prediction.confidence]?.text}
-                </span>
-              </div>
-
-              {selectedMatch?.actualHomeScore !== null &&
-                selectedMatch?.actualAwayScore !== null && (
-                  <div className="result-actual">
-                    <div className="ra-label">最终比分</div>
-                    <div className="ra-score-row">
-                      <div className="ra-team">
-                        <span className="ra-team-flag">
-                          {getTeamFlag(selectedMatch.homeTeam)}
-                        </span>
-                        <span className="ra-team-name">
-                          {tTeam(selectedMatch.homeTeam)}
-                        </span>
-                      </div>
-                      <div className="ra-score-center">
-                        <span className="ra-score-num">
-                          {selectedMatch.actualHomeScore}
-                        </span>
-                        <span className="ra-score-sep">:</span>
-                        <span className="ra-score-num">
-                          {selectedMatch.actualAwayScore}
-                        </span>
-                      </div>
-                      <div className="ra-team">
-                        <span className="ra-team-name">
-                          {tTeam(selectedMatch.awayTeam)}
-                        </span>
-                        <span className="ra-team-flag">
-                          {getTeamFlag(selectedMatch.awayTeam)}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="ra-compare">
-                      <div className="ra-compare-item">
-                        <span className="ra-compare-label">预测比分</span>
-                        <span className="ra-compare-value">
-                          {prediction.predictedHomeScore.toFixed(1)} :{' '}
-                          {prediction.predictedAwayScore.toFixed(1)}
-                        </span>
-                      </div>
-                      <div className="ra-compare-item">
-                        <span className="ra-compare-label">预测方向</span>
-                        <span className="ra-compare-value">
-                          {predictedLabel}
-                        </span>
-                      </div>
-                      <div
-                        className={`ra-compare-item ra-result ${selectedMatch.resultCorrect ? 'correct' : 'wrong'}`}
-                      >
-                        <span className="ra-compare-label">预测结果</span>
-                        <span className="ra-compare-value">
-                          {selectedMatch.resultCorrect ? '✅ 正确' : '❌ 错误'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-              {selectedMatch?.actualHomeScore === null && (
-                <div className="result-matchup">
-                  <div className="rm-team rm-home">
-                    <div className="rm-team-flag">
-                      {getTeamFlag(prediction.homeTeam)}
-                    </div>
-                    <div className="rm-team-info">
-                      <span className="rm-team-name">
-                        {tTeam(prediction.homeTeam)}
-                      </span>
-                      <span className="rm-team-rating">
-                        ELO {Math.round(prediction.homeRating)}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="rm-center">
-                    <div className="rm-score">
-                      <span className="rm-score-num">
-                        {prediction.predictedHomeScore.toFixed(1)}
-                      </span>
-                      <span className="rm-score-sep">:</span>
-                      <span className="rm-score-num">
-                        {prediction.predictedAwayScore.toFixed(1)}
-                      </span>
-                    </div>
-                    <div className="rm-verdict">{predictedLabel}</div>
-                  </div>
-                  <div className="rm-team rm-away">
-                    <div className="rm-team-info">
-                      <span className="rm-team-name">
-                        {tTeam(prediction.awayTeam)}
-                      </span>
-                      <span className="rm-team-rating">
-                        ELO {Math.round(prediction.awayRating)}
-                      </span>
-                    </div>
-                    <div className="rm-team-flag">
-                      {getTeamFlag(prediction.awayTeam)}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div className="result-probs-compact">
-                <div className="rpc-bar">
-                  <div
-                    className="rpc-seg rpc-home"
-                    style={{ width: `${prediction.finalHomeWin * 100}%` }}
-                  />
-                  <div
-                    className="rpc-seg rpc-draw"
-                    style={{ width: `${prediction.finalDraw * 100}%` }}
-                  />
-                  <div
-                    className="rpc-seg rpc-away"
-                    style={{ width: `${prediction.finalAwayWin * 100}%` }}
-                  />
-                </div>
-                <div className="rpc-labels">
-                  <span className="rpc-label-item">
-                    <span className="rpc-dot home" />
-                    主胜{' '}
-                    <strong>
-                      {(prediction.finalHomeWin * 100).toFixed(1)}%
-                    </strong>
-                  </span>
-                  <span className="rpc-label-item">
-                    <span className="rpc-dot draw" />
-                    平局{' '}
-                    <strong>{(prediction.finalDraw * 100).toFixed(1)}%</strong>
-                  </span>
-                  <span className="rpc-label-item">
-                    <span className="rpc-dot away" />
-                    客胜{' '}
-                    <strong>
-                      {(prediction.finalAwayWin * 100).toFixed(1)}%
-                    </strong>
-                  </span>
-                </div>
-              </div>
-
-              <div className="divider" />
-
-              <h3>📊 三模型对比</h3>
-              <div className="models-compare">
-                <div className="mc-header">
-                  <span className="mc-blank" />
-                  <span className="mc-col-label">主胜</span>
-                  <span className="mc-col-label">平局</span>
-                  <span className="mc-col-label">客胜</span>
-                </div>
-                {Object.entries(prediction.individualModels).map(
-                  ([key, model]) => {
-                    const contribution = prediction.modelContributions.find(
-                      (c) => c.modelName === key,
-                    );
-                    const hw = 'homeWin' in model ? model.homeWin : 0;
-                    const dr = 'draw' in model ? model.draw : 0;
-                    const aw = 'awayWin' in model ? model.awayWin : 0;
-                    const modelMax = Math.max(hw, dr, aw);
-
-                    return (
-                      <div key={key} className="mc-row">
-                        <span className="mc-model-name">
-                          <span
-                            className="mc-dot"
-                            style={{ background: MODEL_COLORS[key] || '#888' }}
-                          />
-                          {MODEL_LABELS[key] || key}
-                          <span className="mc-weight">
-                            {contribution
-                              ? (contribution.weight * 100).toFixed(0)
-                              : '-'}
-                            %
-                          </span>
-                        </span>
-                        <span
-                          className={`mc-val ${hw === modelMax ? 'mc-max' : ''}`}
-                        >
-                          {(hw * 100).toFixed(1)}%
-                        </span>
-                        <span
-                          className={`mc-val ${dr === modelMax ? 'mc-max' : ''}`}
-                        >
-                          {(dr * 100).toFixed(1)}%
-                        </span>
-                        <span
-                          className={`mc-val ${aw === modelMax ? 'mc-max' : ''}`}
-                        >
-                          {(aw * 100).toFixed(1)}%
-                        </span>
-                      </div>
-                    );
-                  },
-                )}
-                <div className="mc-row mc-row-final">
-                  <span className="mc-model-name">
-                    <span className="mc-dot" style={{ background: '#fff' }} />
-                    集成结果
-                  </span>
-                  <span
-                    className={`mc-val ${prediction.finalHomeWin === maxProb ? 'mc-max' : ''}`}
-                  >
-                    {(prediction.finalHomeWin * 100).toFixed(1)}%
-                  </span>
-                  <span
-                    className={`mc-val ${prediction.finalDraw === maxProb ? 'mc-max' : ''}`}
-                  >
-                    {(prediction.finalDraw * 100).toFixed(1)}%
-                  </span>
-                  <span
-                    className={`mc-val ${prediction.finalAwayWin === maxProb ? 'mc-max' : ''}`}
-                  >
-                    {(prediction.finalAwayWin * 100).toFixed(1)}%
-                  </span>
-                </div>
-              </div>
-
-              {'poisson' in prediction.individualModels && (
-                <>
-                  <div className="divider" />
-                  <div className="poisson-extra">
-                    <div className="pe-item">
-                      <span className="pe-label">预期进球</span>
-                      <span className="pe-value">
-                        {prediction.individualModels.poisson.homeGoalsExpected.toFixed(
-                          2,
-                        )}{' '}
-                        —{' '}
-                        {prediction.individualModels.poisson.awayGoalsExpected.toFixed(
-                          2,
-                        )}
-                      </span>
-                    </div>
-                    <div className="pe-item">
-                      <span className="pe-label">最可能比分</span>
-                      <span className="pe-value pe-score">
-                        {prediction.individualModels.poisson.mostLikelyScore}
-                      </span>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              <div className="divider" />
-
-              <h3>🔗 模型贡献度</h3>
-              <div className="contributions">
-                {prediction.modelContributions.map((c) => (
-                  <div key={c.modelName} className="contrib-item">
-                    <span
-                      className="contrib-dot"
-                      style={{
-                        background: MODEL_COLORS[c.modelName] || '#888',
-                      }}
-                    />
-                    <span className="contrib-name">
-                      {MODEL_LABELS[c.modelName] || c.modelName}
-                    </span>
-                    <div className="contrib-bar-track">
-                      <div
-                        className="contrib-bar-fill"
-                        style={{
-                          width: `${(c.contribution / Math.max(...prediction.modelContributions.map((x) => x.contribution))) * 100}%`,
-                          background: MODEL_COLORS[c.modelName] || '#888',
-                        }}
-                      />
-                    </div>
-                    <span className="contrib-pct">
-                      {(
-                        (c.contribution /
-                          prediction.modelContributions.reduce(
-                            (s, x) => s + x.contribution,
-                            0,
-                          )) *
-                        100
-                      ).toFixed(0)}
-                      %
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="result-meta">
-                <span>
-                  🏠{' '}
-                  {prediction.homeAdvantage > 0
-                    ? `主场优势 +${prediction.homeAdvantage}`
-                    : '中立场地'}
-                </span>
-                <span>
-                  ⚔️ 实力差{' '}
-                  {Math.round(prediction.homeRating - prediction.awayRating)}{' '}
-                  ELO
-                </span>
-              </div>
-            </div>
-          )}
-        </div>
+        {!isMobile && (
+          <div className="recent-detail-panel">{renderPredictionDetail()}</div>
+        )}
       </div>
     </div>
   );

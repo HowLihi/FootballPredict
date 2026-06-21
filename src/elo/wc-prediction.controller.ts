@@ -12,6 +12,7 @@ import { WcPrediction } from './wc-prediction.entity';
 import { SquadService } from './squad.service';
 import { WcScheduler } from './wc-scheduler';
 import { MatchParams } from './match-params.entity';
+import { ParamWeights, ParamCoefficients } from './ensemble.service';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { venueToBeijingTime } from './beijing-time';
@@ -134,6 +135,26 @@ export class WcPredictionController {
     return this.wcScheduler.refreshNow();
   }
 
+  @Post('backfill-scores')
+  async backfillScores(): Promise<{
+    scanned: number;
+    filled: number;
+    failed: number;
+  }> {
+    this.logger.log('手动触发比分兜底补全...');
+    return this.wcScheduler.backfillMissingScores();
+  }
+
+  @Post('last-resort')
+  async lastResortBackfill(): Promise<{
+    scanned: number;
+    filled: number;
+    failed: number;
+  }> {
+    this.logger.log('手动触发尽力兜底(LLM)...');
+    return this.wcScheduler.lastResortBackfill();
+  }
+
   @Post('gather-intelligence/:id')
   async gatherIntelligence(@Param('id') id: string) {
     return this.wcPredictionService.gatherIntelligence(parseInt(id));
@@ -191,9 +212,46 @@ export class WcPredictionController {
         weatherWeight?: number;
         refereeWeight?: number;
       };
+      customCoefficients?: {
+        formAttack?: number;
+        formDefend?: number;
+        starPowerAttack?: number;
+        fatigueAttack?: number;
+        fatigueDefend?: number;
+        pressureImpact?: number;
+        injuryAttack?: number;
+        injuryDefend?: number;
+        stakesImpact?: number;
+        fatigueInjuryInteraction?: number;
+      };
+      trainRatio?: number;
+      updateWeights?: boolean;
+      runsPerMatch?: number;
     },
   ) {
     this.logger.log('启动预测工作流调优...');
     return this.wcPredictionService.tunePredictionWorkflow(body);
+  }
+
+  @Post('auto-tune')
+  async autoTune(
+    @Body()
+    body?: {
+      iterations?: number;
+      learningRate?: number;
+      trainRatio?: number;
+      runsPerMatch?: number;
+    },
+  ) {
+    this.logger.log('启动自动权重搜索...');
+    return this.wcPredictionService.autoTuneWeights(body);
+  }
+
+  @Get('tuning-weights')
+  getTuningWeights(): {
+    weights: ParamWeights;
+    coefficients: ParamCoefficients;
+  } {
+    return this.wcPredictionService.getEnsembleWeightsAndCoefficients();
   }
 }
